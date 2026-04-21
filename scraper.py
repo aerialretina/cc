@@ -2,8 +2,9 @@
 """
 NYC Startup Sales/GTM Job Scraper
 
-Scrapes Built In NYC, Wellfound, and Work at a Startup (YC), then POSTs
-new listings to a Google Apps Script webhook that appends rows to a Sheet.
+Scrapes Built In NYC, Wellfound, Work at a Startup (YC), Otta, Indeed,
+and LinkedIn (via Google dorking), then POSTs new listings to a Google
+Apps Script webhook that appends rows to a Sheet.
 
 Usage:
     python scraper.py
@@ -25,7 +26,7 @@ import sys
 import time
 from datetime import date
 from pathlib import Path
-from urllib.parse import urljoin
+from urllib.parse import urljoin, unquote
 from urllib.robotparser import RobotFileParser
 
 try:
@@ -157,6 +158,42 @@ async def _scroll_load(page, rounds: int = 6, pause_ms: int = 1_200) -> None:
     for _ in range(rounds):
         await page.evaluate("window.scrollBy(0, window.innerHeight)")
         await page.wait_for_timeout(pause_ms)
+
+
+# ── Google-result helpers ──────────────────────────────────────────────────
+
+def _decode_google_href(href: str) -> str:
+    """Extract the real URL from a Google /url?q=<actual> redirect href.
+    Handles both plain (https://) and percent-encoded (https%3A%2F%2F) forms.
+    """
+    if not href:
+        return ""
+    if href.startswith("https://www.linkedin.com"):
+        return href
+    # Match q= value up to the next & or end-of-string; covers encoded URLs too
+    m = re.search(r"[?&]q=(https?(?:%3A|:).+?)(?:&|$)", href, re.IGNORECASE)
+    return unquote(m.group(1)) if m else href
+
+
+def _parse_linkedin_title(raw: str) -> tuple[str, str]:
+    """
+    Return (job_title, company) from a LinkedIn Google-result title.
+    Handles three common formats:
+      "Account Executive at Acme Corp | LinkedIn"
+      "Senior SDR | Acme Corp | LinkedIn"
+      "Sales Manager - New York, NY | LinkedIn"
+    """
+    text = re.sub(r"\s*\|\s*LinkedIn\s*$", "", raw, flags=re.IGNORECASE).strip()
+    # "Title at Company"
+    m = re.match(r"^(.+?)\s+at\s+(.+)$", text, re.IGNORECASE)
+    if m:
+        return m.group(1).strip(), m.group(2).strip()
+    # "Title | Company"
+    parts = [p.strip() for p in text.split("|")]
+    if len(parts) >= 2:
+        return parts[0], parts[1]
+    # "Title - location …" — company unknown
+    return re.split(r"\s+[-–]\s+", text)[0].strip(), ""
 
 
 # ── Scraper: Built In NYC ──────────────────────────────────────────────────
@@ -347,9 +384,12 @@ async def scrape_wellfound(page) -> list[dict]:
 async def scrape_workatastartup(page) -> list[dict]:
     """
     workatastartup.com filtered to sales + US in-person, sorted by date.
-    YC's board is React-rendered. Falls back to anchor scan if card
-    selectors don't match. Note: WATS lacks a city-level filter, so results
-    span the US; downstream consumers should re-filter on location if needed.
+
+    DOM structure: jobs are grouped *under* company blocks — the company
+    name sits in an a[href*='/companies/'] link that is a PARENT of the
+    individual job entries, not inside them.  We anchor on those company
+    links, walk up to the nearest ancestor that also holds job links, then
+    collect every matching job within that container.
     """
     BASE = "https://www.workatastartup.com"
     URL = (
@@ -369,23 +409,144 @@ async def scrape_workatastartup(page) -> list[dict]:
         await page.goto(URL, wait_until="domcontentloaded", timeout=60_000)
         await page.wait_for_timeout(4_000)
 
-        # Bail if we hit a login wall
         if any(kw in page.url.lower() for kw in ("login", "signin", "sign-in")):
             print(f"[{SOURCE}] Redirected to login page — skipping.")
             return []
 
         await _scroll_load(page, rounds=10, pause_ms=800)
 
+        company_links = await page.query_selector_all("a[href*='/companies/']")
+        if not company_links:
+            print(f"[{SOURCE}] No company links found — page may not have loaded.")
+            return []
+
+        print(f"[{SOURCE}] {len(company_links)} company blocks found.")
+        seen_containers: set[str] = set()
+
+        for co_link in company_links:
+            company = await _txt(co_link)
+            if not company:
+                continue
+
+            # Walk up to the nearest ancestor that also contains a job link.
+            # Company name is always above the job entries in the DOM.
+            container_jsh = await co_link.evaluate_handle("""el => {
+                let node = el.parentElement;
+                while (node && node.tagName !== 'BODY') {
+                    if (node.querySelector('a[href*="/jobs/"]')) return node;
+                    node = node.parentElement;
+                }
+                return null;
+            }""")
+            container_el = container_jsh.as_element()
+            if not container_el:
+                continue
+
+            # Deduplicate: the same container element can hold several
+            # /companies/ links (e.g. logo + name); skip if already visited.
+            try:
+                fingerprint = f"{company}||" + await container_el.evaluate(
+                    "el => el.className + String(el.childElementCount)"
+                )
+            except Exception:
+                fingerprint = company
+            if fingerprint in seen_containers:
+                continue
+            seen_containers.add(fingerprint)
+
+            for job_link in await container_el.query_selector_all("a[href*='/jobs/']"):
+                title = await _txt(job_link)
+                href  = await _attr(job_link, "href")
+                if not title or not relevant(title):
+                    continue
+
+                # Location lives near the job link, not in the company header
+                location = ""
+                try:
+                    parent_jsh = await job_link.evaluate_handle("el => el.parentElement")
+                    parent_el  = parent_jsh.as_element()
+                    if parent_el:
+                        loc_el = await _first(
+                            parent_el,
+                            "[class*='location']", "[class*='city']", "[class*='remote']",
+                        )
+                        location = await _txt(loc_el)
+                except Exception:
+                    pass
+
+                posted = ""
+                try:
+                    date_jsh = await job_link.evaluate_handle(
+                        "el => el.closest('li,div,article')"
+                        "?.querySelector('time,[datetime]')"
+                    )
+                    date_el = date_jsh.as_element()
+                    if date_el:
+                        posted = await _attr(date_el, "datetime") or await _txt(date_el)
+                except Exception:
+                    pass
+
+                jobs.append({
+                    "date":     str(date.today()),
+                    "source":   SOURCE,
+                    "company":  company,
+                    "title":    title,
+                    "location": location or "USA",
+                    "url":      urljoin(BASE, href) if href.startswith("/") else href or URL,
+                    "posted":   posted,
+                })
+
+    except PlaywrightTimeout:
+        print(f"[{SOURCE}] Page load timed out.")
+    except Exception as exc:
+        print(f"[{SOURCE}] Error: {exc}")
+
+    print(f"[{SOURCE}] {len(jobs)} relevant jobs.")
+    return jobs
+
+
+# ── Scraper: Otta ─────────────────────────────────────────────────────────
+
+async def scrape_otta(page) -> list[dict]:
+    """
+    app.otta.com — sales/GTM roles in NYC.
+    React-rendered; may gate full results behind login.  We try the public
+    search endpoint and bail gracefully on a login wall.
+    """
+    BASE = "https://app.otta.com"
+    URL = (
+        "https://app.otta.com/jobs/search"
+        "?functions=Sales&locationPreferences=new-york-city-area"
+    )
+    SOURCE = "Otta"
+
+    if not robots_ok(BASE, URL):
+        print(f"[{SOURCE}] robots.txt disallows this path — skipping.")
+        return []
+
+    jobs: list[dict] = []
+    print(f"\n[{SOURCE}] Fetching {URL}")
+
+    try:
+        await page.goto(URL, wait_until="domcontentloaded", timeout=60_000)
+        await page.wait_for_timeout(4_000)
+
+        if any(kw in page.url.lower() for kw in ("login", "signin", "sign-in", "register")):
+            print(f"[{SOURCE}] Login wall detected — skipping.")
+            return []
+
+        await _scroll_load(page, rounds=8)
+
         cards = []
         for sel in (
-            ".job-name",
-            "[class*='JobRow']",
-            "[class*='job-row']",
-            "div[class*='JobListing']",
+            "[class*='JobCard']",
+            "[class*='job-card']",
+            "article[class*='job']",
+            "[data-testid*='job']",
             "li[class*='job']",
         ):
             cards = await page.query_selector_all(sel)
-            if len(cards) > 1:
+            if cards:
                 print(f"[{SOURCE}] {len(cards)} cards via {sel!r}")
                 break
 
@@ -394,24 +555,18 @@ async def scrape_workatastartup(page) -> list[dict]:
             for link in await page.query_selector_all("a[href*='/jobs/']"):
                 title = await _txt(link)
                 href  = await _attr(link, "href")
-                if not title or len(title) < 3 or not relevant(title):
+                if not title or not relevant(title):
                     continue
-                company  = ""
-                location = ""
+                company = ""
                 try:
-                    parent_jsh = await link.evaluate_handle(
-                        "el => el.closest('li, article, .job, [class*=\"listing\"]')"
+                    p_jsh = await link.evaluate_handle(
+                        "el => el.closest('li,article,[class*=\"card\"],section')"
                     )
-                    parent_el = parent_jsh.as_element()
-                    if parent_el:
-                        company  = await _txt(
-                            await parent_el.query_selector(
-                                "[class*='company'], .company-name, h2, h3"
-                            )
-                        )
-                        location = await _txt(
-                            await parent_el.query_selector(
-                                "[class*='location'], [class*='city']"
+                    p_el = p_jsh.as_element()
+                    if p_el:
+                        company = await _txt(
+                            await p_el.query_selector(
+                                "[class*='company'],[class*='Company'],h2,h3"
                             )
                         )
                 except Exception:
@@ -421,7 +576,7 @@ async def scrape_workatastartup(page) -> list[dict]:
                     "source":   SOURCE,
                     "company":  company or "Unknown",
                     "title":    title,
-                    "location": location or "USA",
+                    "location": "New York, NY",
                     "url":      urljoin(BASE, href) if href.startswith("/") else href,
                     "posted":   "",
                 })
@@ -429,21 +584,18 @@ async def scrape_workatastartup(page) -> list[dict]:
             return jobs
 
         for card in cards:
-            title_el   = await _first(card, "a[href*='/jobs/']", "[class*='title']",
-                                      "[class*='role']", "h2", "h3")
-            company_el = await _first(card, "[class*='company']", ".company-name",
-                                      "[class*='employer']")
+            title_el   = await _first(card, "[class*='title']", "[class*='Title']",
+                                      "[class*='role']", "h2", "h3", "h4")
+            company_el = await _first(card, "[class*='company']", "[class*='Company']",
+                                      "[class*='employer']", "[class*='org']")
             link_el    = await _first(card, "a[href*='/jobs/']", "a")
-            loc_el     = await _first(card, "[class*='location']", "[class*='remote']",
-                                      "[class*='city']")
-            date_el    = await _first(card, "time", "[datetime]", "[class*='date']",
-                                      "[class*='posted']")
+            loc_el     = await _first(card, "[class*='location']", "[class*='Location']",
+                                      "[class*='city']", "[class*='remote']")
 
             title    = await _txt(title_el)
             company  = await _txt(company_el)
             href     = await _attr(link_el, "href")
-            location = await _txt(loc_el) or "USA"
-            posted   = await _attr(date_el, "datetime") or await _txt(date_el)
+            location = await _txt(loc_el) or "New York, NY"
 
             if not title or not relevant(title):
                 continue
@@ -455,6 +607,122 @@ async def scrape_workatastartup(page) -> list[dict]:
                 "title":    title,
                 "location": location,
                 "url":      urljoin(BASE, href) if href.startswith("/") else href or URL,
+                "posted":   "",
+            })
+
+    except PlaywrightTimeout:
+        print(f"[{SOURCE}] Page load timed out.")
+    except Exception as exc:
+        print(f"[{SOURCE}] Error: {exc}")
+
+    print(f"[{SOURCE}] {len(jobs)} relevant jobs.")
+    return jobs
+
+
+# ── Scraper: Indeed ────────────────────────────────────────────────────────
+
+async def scrape_indeed(page) -> list[dict]:
+    """
+    indeed.com — sales/GTM roles at NYC startups, last 14 days, by date.
+    Indeed uses strong anti-bot defences; we detect CAPTCHA/robot-check
+    pages and bail gracefully.  data-testid attributes are more stable
+    across redesigns than class names.
+    """
+    BASE = "https://www.indeed.com"
+    URL = (
+        "https://www.indeed.com/jobs"
+        "?q=sales+startup&l=New+York%2C+NY&sort=date&fromage=14"
+    )
+    SOURCE = "Indeed"
+
+    if not robots_ok(BASE, URL):
+        print(f"[{SOURCE}] robots.txt disallows this path — skipping.")
+        return []
+
+    jobs: list[dict] = []
+    print(f"\n[{SOURCE}] Fetching {URL}")
+
+    try:
+        await page.goto(URL, wait_until="domcontentloaded", timeout=60_000)
+        await page.wait_for_timeout(4_000)
+
+        body_text = await page.evaluate("document.body.innerText")
+        if any(kw in body_text.lower() for kw in (
+            "captcha", "robot", "unusual traffic", "verify you are human",
+        )):
+            print(f"[{SOURCE}] Anti-bot check triggered — skipping.")
+            return []
+
+        await _scroll_load(page, rounds=6)
+
+        cards = []
+        for sel in (
+            ".job_seen_beacon",
+            "[class*='jobCard']",
+            "li[class*='result']",
+            "div[class*='result']",
+        ):
+            cards = await page.query_selector_all(sel)
+            if cards:
+                print(f"[{SOURCE}] {len(cards)} cards via {sel!r}")
+                break
+
+        if not cards:
+            print(f"[{SOURCE}] No cards — Indeed may have blocked the request.")
+            return []
+
+        for card in cards:
+            title_el   = await _first(
+                card,
+                "h2[class*='jobTitle'] a span[title]",
+                "h2[class*='jobTitle'] a span",
+                "[data-testid='jobTitle']",
+                "a.jcs-JobTitle span",
+                "h2",
+            )
+            company_el = await _first(
+                card,
+                "[data-testid='company-name']",
+                "[class*='companyName']",
+                "span[class*='company']",
+            )
+            link_el    = await _first(
+                card,
+                "h2[class*='jobTitle'] a",
+                "a.jcs-JobTitle",
+                "a[data-jk]",
+            )
+            loc_el     = await _first(
+                card,
+                "[data-testid='text-location']",
+                "[class*='companyLocation']",
+            )
+            date_el    = await _first(
+                card,
+                "[data-testid='myJobsStateDate']",
+                "span[class*='date']",
+            )
+
+            # Prefer the title attribute (often cleaner than inner text on Indeed)
+            title    = await _attr(title_el, "title") or await _txt(title_el)
+            company  = await _txt(company_el)
+            href     = await _attr(link_el, "href")
+            location = await _txt(loc_el) or "New York, NY"
+            posted   = await _txt(date_el)
+
+            if not title or not relevant(title):
+                continue
+
+            if href and not href.startswith("http"):
+                href = urljoin(BASE, href)
+
+            jobs.append({
+                "date":     str(date.today()),
+                "source":   SOURCE,
+                "company":  company or "Unknown",
+                "title":    title,
+                "location": location,
+                "url":      href or URL,
                 "posted":   posted,
             })
 
@@ -464,6 +732,106 @@ async def scrape_workatastartup(page) -> list[dict]:
         print(f"[{SOURCE}] Error: {exc}")
 
     print(f"[{SOURCE}] {len(jobs)} relevant jobs.")
+    return jobs
+
+
+# ── Scraper: LinkedIn via Google dorking ───────────────────────────────────
+
+async def scrape_linkedin_google(page) -> list[dict]:
+    """
+    Google dorking for LinkedIn job listings in NYC.
+    Issues targeted searches for site:linkedin.com/jobs matching
+    sales/GTM keywords, then parses result titles and URLs.
+
+    Note: automating Google Search is against Google's Terms of Service.
+    Google may block requests after a few queries; we detect CAPTCHA /
+    consent pages and stop early rather than retrying aggressively.
+    """
+    SOURCE = "LinkedIn (via Google)"
+
+    QUERIES = [
+        'site:linkedin.com/jobs "account executive" OR "sales" "New York" startup',
+        'site:linkedin.com/jobs "SDR" OR "BDR" OR "business development" "New York"',
+        'site:linkedin.com/jobs "customer success" OR "GTM" OR "revenue" "New York" startup',
+    ]
+
+    jobs: list[dict] = []
+
+    for query in QUERIES:
+        search_url = (
+            "https://www.google.com/search"
+            f"?q={requests.utils.quote(query)}&num=20&hl=en&gl=us"
+        )
+
+        if not robots_ok("https://www.google.com", search_url):
+            print(f"[{SOURCE}] Google robots.txt disallows — stopping.")
+            break
+
+        print(f"\n[{SOURCE}] Query: {query[:70]}…")
+
+        try:
+            await page.goto(search_url, wait_until="domcontentloaded", timeout=60_000)
+            await page.wait_for_timeout(3_000)
+
+            body_text = await page.evaluate("document.body.innerText")
+            if any(kw in body_text.lower() for kw in (
+                "captcha", "unusual traffic", "not a robot", "verify",
+            )):
+                print(f"[{SOURCE}] Google CAPTCHA triggered — stopping.")
+                break
+            if "consent.google.com" in page.url or "before you continue" in body_text.lower():
+                print(f"[{SOURCE}] Google consent gate — stopping.")
+                break
+
+            # Each organic result lives in div.g or a [data-sokoban-container]
+            result_els = await page.query_selector_all(
+                "div.g, div[data-sokoban-container]"
+            )
+            if not result_els:
+                result_els = await page.query_selector_all("div:has(h3)")
+
+            seen_urls: set[str] = set()
+            for el in result_els:
+                h3_el     = await _first(el, "h3")
+                raw_title = await _txt(h3_el)
+                if not raw_title:
+                    continue
+
+                link_el  = await _first(el, "a[href*='linkedin.com']", "a[href]")
+                raw_href = await _attr(link_el, "href")
+                url      = _decode_google_href(raw_href)
+
+                if not url or "linkedin.com/jobs" not in url:
+                    continue
+                if url in seen_urls:
+                    continue
+                seen_urls.add(url)
+
+                job_title, company = _parse_linkedin_title(raw_title)
+                if not job_title or not relevant(job_title):
+                    continue
+
+                jobs.append({
+                    "date":     str(date.today()),
+                    "source":   SOURCE,
+                    "company":  company or "Unknown",
+                    "title":    job_title,
+                    "location": "New York, NY",
+                    "url":      url,
+                    "posted":   "",
+                })
+
+        except PlaywrightTimeout:
+            print(f"[{SOURCE}] Timed out — stopping.")
+            break
+        except Exception as exc:
+            print(f"[{SOURCE}] Error on query: {exc}")
+            break
+
+        # Extra pause between Google queries to reduce block risk
+        await asyncio.sleep(RATE_LIMIT_DELAY * 2)
+
+    print(f"[{SOURCE}] {len(jobs)} relevant jobs total.")
     return jobs
 
 
@@ -486,7 +854,14 @@ async def run() -> None:
             extra_http_headers={"Accept-Language": "en-US,en;q=0.9"},
         )
 
-        for scrape_fn in (scrape_builtin, scrape_wellfound, scrape_workatastartup):
+        for scrape_fn in (
+            scrape_builtin,
+            scrape_wellfound,
+            scrape_workatastartup,
+            scrape_otta,
+            scrape_indeed,
+            scrape_linkedin_google,
+        ):
             page = await ctx.new_page()
             try:
                 results = await scrape_fn(page)
