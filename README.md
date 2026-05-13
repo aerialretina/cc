@@ -35,6 +35,12 @@ alembic upgrade head
 uvicorn lip.api.main:app --reload
 ```
 
+Open the plaintext front end at `http://localhost:8000/` —
+no JS, no build step, just server-rendered monospace pages over the
+live DB. Routes: `/`, `/ui/postings`, `/ui/organizations`,
+`/ui/compensation`, `/ui/projects`. The OpenAPI explorer remains at
+`/docs`.
+
 Run the worker in another shell:
 
 ```bash

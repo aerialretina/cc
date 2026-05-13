@@ -19,6 +19,7 @@ from lip.api.routes import (
     projects,
 )
 from lip.logging import configure_logging
+from lip.ui.router import router as ui_router
 
 
 @asynccontextmanager
@@ -46,3 +47,6 @@ app.include_router(mobility.router, prefix="/v1/mobility", tags=["mobility"])
 app.include_router(organizations.router, prefix="/v1/organizations", tags=["organizations"])
 app.include_router(projects.router, prefix="/v1/projects", tags=["projects"])
 app.include_router(persons.router, prefix="/v1/persons", tags=["persons"])
+
+# Plaintext front end mounted at /. Routes live under "/" and "/ui/*".
+app.include_router(ui_router)
