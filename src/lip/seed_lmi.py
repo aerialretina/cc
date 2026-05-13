@@ -116,12 +116,12 @@ def apply(db: Session) -> SeedLmiResult:
             select(LmiSnapshot).where(
                 LmiSnapshot.region_code == region,
                 LmiSnapshot.occupation_code == noc,
+                LmiSnapshot.industrial_overlay_code == overlay,
                 LmiSnapshot.source == source,
                 LmiSnapshot.observed_period == PERIOD,
             )
         ).scalar_one_or_none()
         if existing is not None:
-            existing.industrial_overlay_code = overlay
             existing.employment = emp
             existing.median_wage = Decimal(str(wage))
             existing.shortage_indicator = Decimal(str(shortage))

@@ -46,9 +46,10 @@ class LmiSnapshot(UUIDPKMixin, TimestampMixin, Base):
         UniqueConstraint(
             "region_code",
             "occupation_code",
+            "industrial_overlay_code",
             "source",
             "observed_period",
-            name="uq_lmi_region_occ_src_period",
+            name="uq_lmi_region_occ_overlay_src_period",
         ),
         Index("ix_lmi_region", "region_code"),
         Index("ix_lmi_occupation", "occupation_system", "occupation_code"),
