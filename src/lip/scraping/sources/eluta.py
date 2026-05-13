@@ -14,9 +14,9 @@ from datetime import UTC, datetime
 import httpx
 from tenacity import RetryError, retry, stop_after_attempt, wait_exponential
 
-from lip.config import get_settings
 from lip.logging import get_logger
 from lip.scraping.base import ScrapedPosting, Spider
+from lip.scraping.http_client import make_http_client
 from lip.scraping.sources.randstad import _parse as parse_jobposting_ldjson
 
 logger = get_logger(__name__)
@@ -41,12 +41,7 @@ class ElutaSpider(Spider):
     )
 
     def __init__(self) -> None:
-        self._settings = get_settings()
-        self._client = httpx.Client(
-            timeout=15.0,
-            headers={"User-Agent": self._settings.scrape_user_agent},
-            follow_redirects=True,
-        )
+        self._client = make_http_client(accept="text/html")
 
     def __del__(self) -> None:
         with contextlib.suppress(Exception):

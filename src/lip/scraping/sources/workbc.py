@@ -13,9 +13,9 @@ from datetime import UTC, datetime
 import httpx
 from tenacity import RetryError, retry, stop_after_attempt, wait_exponential
 
-from lip.config import get_settings
 from lip.logging import get_logger
 from lip.scraping.base import ScrapedPosting, Spider
+from lip.scraping.http_client import make_http_client
 
 logger = get_logger(__name__)
 
@@ -31,13 +31,7 @@ class WorkBCSpider(Spider):
     NOC_FILTERS = ("70010", "72014", "21300", "21301", "21331", "72301", "72106", "73400")
 
     def __init__(self) -> None:
-        self._settings = get_settings()
-        self._client = httpx.Client(
-            timeout=15.0,
-            headers={"User-Agent": self._settings.scrape_user_agent,
-                     "Accept": "application/json"},
-            follow_redirects=True,
-        )
+        self._client = make_http_client(accept="application/json")
 
     def __del__(self) -> None:
         with contextlib.suppress(Exception):

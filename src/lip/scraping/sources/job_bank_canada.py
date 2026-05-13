@@ -27,6 +27,7 @@ from tenacity import retry, stop_after_attempt, wait_exponential
 from lip.config import get_settings
 from lip.logging import get_logger
 from lip.scraping.base import ScrapedPosting, Spider
+from lip.scraping.http_client import make_http_client
 
 logger = get_logger(__name__)
 
@@ -50,14 +51,7 @@ class JobBankCanadaSpider(Spider):
         self.page_size = page_size
         self.max_pages = max_pages
         self._settings = get_settings()
-        self._client = httpx.Client(
-            timeout=30.0,
-            headers={
-                "User-Agent": self._settings.scrape_user_agent,
-                "Accept": "application/json, text/html;q=0.9",
-            },
-            follow_redirects=True,
-        )
+        self._client = make_http_client(timeout=30.0)
 
     def __del__(self) -> None:
         with contextlib.suppress(Exception):

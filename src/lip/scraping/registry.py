@@ -9,8 +9,10 @@ from lip.scraping.sources.adecco import (
     AkkodisSpider,
 )
 from lip.scraping.sources.eluta import ElutaSpider
+from lip.scraping.sources.greenhouse import StantecGreenhouseSpider, WSPGreenhouseSpider
 from lip.scraping.sources.job_bank_canada import JobBankCanadaSpider
 from lip.scraping.sources.kelly import KellyCanadaSpider, KellyUSSpider
+from lip.scraping.sources.lever import ChandosLeverSpider
 from lip.scraping.sources.randstad import (
     RandstadCanadaSpider,
     RandstadUSSpider,
@@ -35,9 +37,28 @@ from lip.scraping.sources.vertical_boards import (
     SPEJobBoardSpider,
 )
 from lip.scraping.sources.workbc import WorkBCSpider
+from lip.scraping.sources.workday import (
+    AtkinsRealisWorkdaySpider,
+    CamecoWorkdaySpider,
+    EnbridgeWorkdaySpider,
+    HydroOneWorkdaySpider,
+    OPGWorkdaySpider,
+    PCLWorkdaySpider,
+    SuncorWorkdaySpider,
+    TeckWorkdaySpider,
+)
 
 _CLASSES: tuple[type[Spider], ...] = (
-    # Tier 1 — direct company careers (highest signal)
+    # Tier 1 — ATS APIs (highest signal: stable JSON endpoints, no bot challenge)
+    # Workday
+    PCLWorkdaySpider, OPGWorkdaySpider, SuncorWorkdaySpider,
+    CamecoWorkdaySpider, EnbridgeWorkdaySpider, AtkinsRealisWorkdaySpider,
+    TeckWorkdaySpider, HydroOneWorkdaySpider,
+    # Greenhouse
+    StantecGreenhouseSpider, WSPGreenhouseSpider,
+    # Lever
+    ChandosLeverSpider,
+    # Tier 1 — direct company careers (HTML scrape fallback)
     PCLCareersSpider, AeconCareersSpider, EllisDonCareersSpider,
     SuncorCareersSpider, TCEnergyCareersSpider, EnbridgeCareersSpider,
     OPGCareersSpider, BrucePowerCareersSpider,
