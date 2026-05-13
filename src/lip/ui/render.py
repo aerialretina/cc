@@ -20,6 +20,7 @@ NAV = [
     ("/ui/compensation", "Compensation"),
     ("/ui/projects", "Projects"),
     ("/ui/lmi", "Labor market"),
+    ("/ui/sources", "Sources"),
     ("/docs", "API"),
 ]
 

@@ -28,6 +28,14 @@ class BLSConnector:
     warehouse target is wired up.
     """
 
+    name: str = ""
+    description: str = ""
+    dataset_label: str = ""
+    update_frequency: str = ""
+    granularity: str = ""
+    status: str = "scaffolded"
+    country: str = "US"
+
     def __init__(self) -> None:
         self._settings = get_settings()
         self._client = httpx.Client(timeout=60.0)
@@ -51,6 +59,12 @@ class BLSConnector:
 class JOLTSConnector(BLSConnector):
     """Job Openings and Labor Turnover Survey."""
 
+    name = "bls_jolts"
+    description = "Job openings, hires, and separations by industry (US)."
+    dataset_label = "bls_jolts"
+    update_frequency = "monthly"
+    granularity = "industry / national"
+
     # Industry-level series IDs; full list loaded from BLS website during ETL.
     DEFAULT_SERIES: tuple[str, ...] = (
         "JTU2300000000000JOL",  # Construction job openings, US total, level (000)
@@ -67,18 +81,26 @@ class JOLTSConnector(BLSConnector):
 class OEWSConnector(BLSConnector):
     """Occupational Employment and Wage Statistics — annual."""
 
+    name = "bls_oews"
+    description = "Occupational employment and wage statistics by MSA (US)."
+    dataset_label = "bls_oews"
+    update_frequency = "annual"
+    granularity = "MSA"
+
     def fetch(self, *, since: date | None = None) -> Iterable[dict[str, Any]]:
-        # Full-table downloads are the path to use here; the time-series
-        # API only exposes a subset. Concrete impl lands with the warehouse.
         return []
 
 
 class QCEWConnector(BLSConnector):
     """Quarterly Census of Employment and Wages — quarterly."""
 
+    name = "bls_qcew"
+    description = "Quarterly census of employment and wages by NAICS / county (US)."
+    dataset_label = "bls_qcew"
+    update_frequency = "quarterly"
+    granularity = "county"
+
     def fetch(self, *, since: date | None = None) -> Iterable[dict[str, Any]]:
-        # QCEW is best consumed via the flat-file bulk API:
-        # https://data.bls.gov/cew/data/files/
         return []
 
 

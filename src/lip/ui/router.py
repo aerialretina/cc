@@ -12,6 +12,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from lip.db import get_db
+from lip.government.registry import all_connector_classes
 from lip.models import (
     CompensationRecord,
     HiringEvent,
@@ -21,6 +22,7 @@ from lip.models import (
     Project,
     RawPosting,
 )
+from lip.scraping.registry import all_spider_classes
 from lip.ui.render import (
     LinkedRow,
     Raw,
@@ -482,6 +484,96 @@ def project_detail(project_id: UUID, db: Session = Depends(get_db)) -> HTMLRespo
     if proj.source_url:
         body.append(f'<p><a class="btn ghost" href="{proj.source_url}" target="_blank" rel="noopener">Source →</a></p>')
     return HTMLResponse(page(proj.name, "".join(body), current_path="/ui/projects"))
+
+
+# ============================================================
+# Sources — coverage page
+# ============================================================
+
+_TIER_LABEL = {
+    1: "Tier 1 · Company careers",
+    2: "Tier 2 · Vertical board",
+    3: "Tier 3 · General / agency",
+    4: "Tier 4 · Association",
+}
+
+
+@router.get("/ui/sources", include_in_schema=False)
+def sources_view(db: Session = Depends(get_db)) -> HTMLResponse:
+    spiders = sorted(all_spider_classes(), key=lambda s: (s.tier, s.source_name))
+    connectors = sorted(all_connector_classes(),
+                        key=lambda c: (c.country, c.name))
+
+    try:
+        ingested = dict(db.execute(
+            select(RawPosting.source, func.count())
+            .group_by(RawPosting.source)
+        ).all())
+    except SQLAlchemyError:
+        db.rollback()
+        ingested = {}
+
+    summary = stat_grid([
+        stat("Registered spiders", len(spiders),
+             sub=f"{sum(1 for s in spiders if s.status == 'live'):,} live"),
+        stat("Government connectors", len(connectors),
+             sub=f"{sum(1 for c in connectors if getattr(c, 'status', 'scaffolded') == 'live'):,} live"),
+        stat("Sources with data", sum(1 for v in ingested.values() if v > 0),
+             sub="raw postings ingested"),
+        stat("Total raw observations", sum(ingested.values())),
+    ])
+
+    body = [summary]
+
+    # Group spiders by tier
+    body.append('<h2>Job-posting sources</h2>')
+    spider_rows = []
+    for s in spiders:
+        spider_rows.append([
+            LinkedRow(s.homepage or "#"),
+            s.source_name,
+            Raw(pill(_TIER_LABEL.get(s.tier, f"Tier {s.tier}"), variant="accent")),
+            Raw(pills(s.countries) if s.countries else "—"),
+            s.description or "—",
+            Raw(_status_pill(s.status)),
+            ingested.get(s.source_name, 0),
+        ])
+    body.append(table(
+        ["", "Source", "Tier", "Countries", "Description", "Status", "Ingested"],
+        spider_rows,
+        right_align=(6,),
+    ))
+
+    body.append('<h2>Government data connectors</h2>')
+    gov_rows = []
+    for c in connectors:
+        gov_rows.append([
+            getattr(c, "country", "—"),
+            c.name,
+            Raw(pill(c.description or "—")),
+            getattr(c, "update_frequency", "—"),
+            getattr(c, "granularity", "—"),
+            Raw(_status_pill(getattr(c, "status", "scaffolded"))),
+        ])
+    body.append(table(
+        ["Country", "Connector", "Dataset", "Cadence", "Granularity", "Status"],
+        gov_rows,
+    ))
+
+    return HTMLResponse(page(
+        "Sources",
+        "".join(body),
+        current_path="/ui/sources",
+        subtitle=f"{len(spiders)} spiders · {len(connectors)} government connectors",
+    ))
+
+
+def _status_pill(status: str) -> str:
+    if status == "live":
+        return pill("live", variant="good")
+    if status == "scaffolded":
+        return pill("scaffolded", variant="warn")
+    return pill(status or "—")
 
 
 # ============================================================

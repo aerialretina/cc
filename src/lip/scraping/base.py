@@ -41,12 +41,23 @@ class ScrapedPosting:
 class Spider(abc.ABC):
     """Abstract spider.
 
-    Subclasses must set ``source_name`` and implement ``crawl()``.
+    Subclasses must set ``source_name`` and implement ``crawl()``. The
+    metadata fields (tier, country, description, ...) drive the
+    ``/ui/sources`` coverage page and the registered-spiders count.
     """
 
     source_name: str
+    description: str = ""
+    # 1 = direct company career pages, 2 = vertical / niche boards,
+    # 3 = general boards (Indeed, LinkedIn), 4 = associations / aggregators.
+    tier: int = 3
+    countries: tuple[str, ...] = ()  # ISO-3166-1 alpha-2, e.g. ("CA",) or ("CA","US","UK")
     crawl_frequency_hours: int = 24
     requires_browser: bool = False
+    # "live" once the spider has been validated end-to-end; "scaffolded"
+    # while only the URL pattern + parser shape are committed.
+    status: str = "scaffolded"
+    homepage: str = ""
 
     @abc.abstractmethod
     def crawl(self) -> Iterator[ScrapedPosting]:
