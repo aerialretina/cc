@@ -37,6 +37,11 @@ class Settings(BaseSettings):
     statcan_api_key: str | None = None
     job_bank_user_id: str | None = None
 
+    # Adzuna aggregator (https://developer.adzuna.com) — free tier covers
+    # Canada + 15 other countries. Both id and key required.
+    adzuna_app_id: str | None = None
+    adzuna_app_key: str | None = None
+
     geocoder: str | None = None
     geocoder_api_key: str | None = None
 
