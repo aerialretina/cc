@@ -98,6 +98,10 @@ table.data tr:last-child td { border-bottom:none; }
 table.data tr.linked { cursor:pointer; transition:background 80ms ease; }
 table.data tr.linked:hover { background:var(--bg-elev-2); }
 table.data td.right { text-align:right; }
+table.data th:first-child, table.data td:first-child {
+  width:1%; white-space:nowrap; text-align:right;
+  font-variant-numeric:tabular-nums; color:var(--text-faint);
+}
 table.data td a { color:var(--text); font-weight:500; }
 table.data td a:hover { color:var(--accent-strong); }
 .muted { color:var(--text-muted); }
@@ -267,18 +271,34 @@ def card_grid(cards: Iterable[str]) -> str:
 
 
 def table(headers: Sequence[str], rows: Iterable[Sequence[Any]], *,
-          right_align: Sequence[int] = ()) -> str:
-    """Render a styled data table. Cell values are escaped here; if you
-    need to embed pre-built HTML in a cell, use ``Raw(html_string)``."""
+          right_align: Sequence[int] = (), numbered: bool = True) -> str:
+    """Render a styled data table.
+
+    With ``numbered=True`` (default) the leading column is a 1-based row
+    index. Right-align indices in ``right_align`` are 0-based against
+    ``headers`` (i.e. counted *after* the row-number column is added).
+
+    Cell values are escaped here; if a cell needs to embed pre-built
+    HTML, wrap it in ``Raw(html_string)``.
+    """
+    if numbered:
+        headers = ("#", *headers)
+        right_align = tuple({0, *right_align})  # always right-align the index
+
     head = "<tr>" + "".join(f"<th>{html.escape(h)}</th>" for h in headers) + "</tr>"
+
     body = []
-    for row in rows:
-        link = row[0].link if isinstance(row[0], LinkedRow) else None
+    for idx, row in enumerate(rows, start=1):
+        link = row[0].link if row and isinstance(row[0], LinkedRow) else None
+        data_cells = list(row[1:] if link else row)
+        if numbered:
+            data_cells = [Raw(f'<span class="muted num">{idx}</span>'), *data_cells]
         cells = []
-        for i, v in enumerate(row[1:] if link else row):
+        for i, v in enumerate(data_cells):
             cls = " class=\"right\"" if i in right_align else ""
             cells.append(f"<td{cls}>{_cell(v)}</td>")
-        attrs = ' class="linked" onclick="window.location=\'' + html.escape(link) + '\'"' if link else ""
+        attrs = (' class="linked" onclick="window.location=\'' + html.escape(link) + '\'"'
+                 if link else "")
         body.append(f"<tr{attrs}>" + "".join(cells) + "</tr>")
     return f'<table class="data"><thead>{head}</thead><tbody>{"".join(body)}</tbody></table>'
 

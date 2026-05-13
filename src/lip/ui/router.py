@@ -52,20 +52,49 @@ router = APIRouter(default_response_class=HTMLResponse)
 @router.get("/", include_in_schema=False)
 def index(db: Session = Depends(get_db)) -> HTMLResponse:
     counts = _safe_counts(db)
-    # Top shortage occupations from LMI, last observed period.
+
+    # ---- top hiring organizations (by active posting count) --------------
+    try:
+        top_orgs = db.execute(
+            select(Organization, func.count(Posting.id).label("n"))
+            .join(Posting, Posting.organization_id == Organization.id)
+            .where(Posting.is_active.is_(True))
+            .group_by(Organization.id)
+            .order_by(func.count(Posting.id).desc())
+            .limit(8)
+        ).all()
+    except SQLAlchemyError:
+        db.rollback()
+        top_orgs = []
+
+    # ---- top regions by active postings ----------------------------------
+    try:
+        top_regions = db.execute(
+            select(Posting.region_code, func.count().label("n"))
+            .where(Posting.is_active.is_(True), Posting.region_code.is_not(None))
+            .group_by(Posting.region_code)
+            .order_by(func.count().desc())
+            .limit(8)
+        ).all()
+    except SQLAlchemyError:
+        db.rollback()
+        top_regions = []
+
+    # ---- tightest labor markets ------------------------------------------
     try:
         top_shortage = db.scalars(
             select(LmiSnapshot)
             .order_by(LmiSnapshot.shortage_indicator.desc().nullslast())
-            .limit(5)
+            .limit(6)
         ).all()
     except SQLAlchemyError:
         db.rollback()
         top_shortage = []
 
+    # ---- recent postings -------------------------------------------------
     try:
         recent = db.scalars(
-            select(Posting).order_by(Posting.last_seen_at.desc()).limit(5)
+            select(Posting).order_by(Posting.last_seen_at.desc()).limit(8)
         ).all()
         org_lookup = _org_lookup(db, [p.organization_id for p in recent])
     except SQLAlchemyError:
@@ -73,21 +102,60 @@ def index(db: Session = Depends(get_db)) -> HTMLResponse:
         recent = []
         org_lookup = {}
 
-    grid = stat_grid([
-        stat("Active postings", counts["postings_active"], sub=f"{counts['postings']:,} total"),
-        stat("Organizations", counts["organizations"]),
-        stat("Tracked projects", counts["projects"]),
-        stat("LMI rows", counts["lmi"]),
-        stat("Placements", counts["hiring_events"], sub=f"{counts['compensation']:,} comp records"),
-        stat("Raw scrapes", counts["raw_postings"]),
-    ])
+    # ---- upcoming projects (closest to construction start) ---------------
+    try:
+        upcoming = db.scalars(
+            select(Project)
+            .order_by(Project.construction_start_on.desc().nullslast())
+            .limit(6)
+        ).all()
+    except SQLAlchemyError:
+        db.rollback()
+        upcoming = []
 
-    sections = [grid]
+    sections: list[str] = []
+
+    sections.append(stat_grid([
+        stat("Active postings", counts["postings_active"],
+             sub=f"{counts['postings']:,} total"),
+        stat("Organizations", counts["organizations"],
+             sub=f"{sum(1 for o, _ in top_orgs if (o.is_recruiter_client or False))} client" if top_orgs else None),
+        stat("Tracked projects", counts["projects"]),
+        stat("LMI snapshot rows", counts["lmi"]),
+        stat("Placements", counts["hiring_events"],
+             sub=f"{counts['compensation']:,} comp records"),
+        stat("Raw scrape records", counts["raw_postings"]),
+    ]))
+
+    if top_orgs:
+        sections.append('<h2>Top hiring employers</h2>')
+        sections.append(table(
+            ["Organization", "Sectors", "Regions", "Active postings"],
+            [
+                [
+                    LinkedRow(f"/ui/organizations/{o.id}"),
+                    o.canonical_name,
+                    Raw(pills(o.sector_tags[:3]) if o.sector_tags else "—"),
+                    ", ".join((o.operating_regions or [])[:3]) or "—",
+                    int(n),
+                ]
+                for o, n in top_orgs
+            ],
+            right_align=(4,),
+        ))
+
+    if top_regions:
+        sections.append('<h2>Top regions by active demand</h2>')
+        sections.append(table(
+            ["Region", "Active postings"],
+            [[r.region_code, int(r.n)] for r in top_regions],
+            right_align=(2,),
+        ))
 
     if top_shortage:
         sections.append('<h2>Tightest labor markets</h2>')
         sections.append(table(
-            ["Occupation", "Region", "Shortage", "Employment", "Median wage", "36m projected"],
+            ["Occupation", "Region", "Shortage", "Employment", "Median wage", "36m projection"],
             [
                 [
                     s.industrial_overlay_code or s.occupation_code or "—",
@@ -99,19 +167,20 @@ def index(db: Session = Depends(get_db)) -> HTMLResponse:
                 ]
                 for s in top_shortage
             ],
-            right_align=(3, 4, 5),
+            right_align=(4, 5),
         ))
 
     if recent:
         sections.append('<h2>Recently observed postings</h2>')
         sections.append(table(
-            ["", "Title", "Organization", "Region", "Salary", "Last seen"],
+            ["Title", "Organization", "Region", "Seniority", "Salary", "Last seen"],
             [
                 [
                     LinkedRow(f"/ui/postings/{p.id}"),
                     p.title,
-                    org_lookup.get(p.organization_id, "—"),
+                    Raw(_org_link(p.organization_id, org_lookup)),
                     p.region_code or "—",
+                    Raw(pill(p.seniority) if p.seniority else "—"),
                     Raw(fmt_salary(p.salary_low, p.salary_high, p.salary_currency, p.salary_period)),
                     p.last_seen_at,
                 ]
@@ -119,11 +188,30 @@ def index(db: Session = Depends(get_db)) -> HTMLResponse:
             ],
         ))
 
+    if upcoming:
+        sections.append('<h2>Largest tracked projects</h2>')
+        sections.append(table(
+            ["Project", "Type", "Region", "Capex (USD)", "Peak headcount", "Construction start"],
+            [
+                [
+                    LinkedRow(f"/ui/projects/{pr.id}"),
+                    pr.name,
+                    Raw(pill(pr.project_type, variant="accent") if pr.project_type else "—"),
+                    pr.region_code or "—",
+                    Raw(fmt_money(pr.capex_usd)),
+                    pr.estimated_peak_headcount,
+                    pr.construction_start_on,
+                ]
+                for pr in upcoming
+            ],
+            right_align=(4, 5),
+        ))
+
     return HTMLResponse(page(
-        "Labor intelligence platform",
+        "Labor Intelligence Platform",
         "".join(sections),
         current_path="/",
-        subtitle="Construction, energy, industrial and trades — Canada primary.",
+        subtitle="Construction, energy, industrial, and trades — Canada primary, US rolling.",
     ))
 
 
@@ -175,7 +263,7 @@ def postings_view(
         )
     else:
         body = toolbar + table(
-            ["", "Title", "Organization", "Region", "Seniority", "Salary", "Last seen"],
+            ["Title", "Organization", "Region", "Seniority", "Salary", "Last seen"],
             [
                 [
                     LinkedRow(f"/ui/postings/{p.id}"),
@@ -371,7 +459,7 @@ def organization_detail(org_id: UUID, db: Session = Depends(get_db)) -> HTMLResp
     if postings:
         body.append('<h2>Recent postings</h2>')
         body.append(table(
-            ["", "Title", "Region", "Seniority", "Salary", "Last seen"],
+            ["Title", "Region", "Seniority", "Salary", "Last seen"],
             [
                 [
                     LinkedRow(f"/ui/postings/{p.id}"),
@@ -403,7 +491,7 @@ def compensation_view(db: Session = Depends(get_db), limit: int = 100) -> HTMLRe
         body = empty_state("compensation records")
     else:
         body = table(
-            ["Observed", "Occupation overlay", "Seniority", "Region", "Range", "Source"],
+            ["Observed on", "Occupation overlay", "Seniority", "Region", "Salary range", "Source type"],
             [
                 [
                     r.observed_on,
@@ -539,7 +627,7 @@ def sources_view(db: Session = Depends(get_db)) -> HTMLResponse:
             ingested.get(s.source_name, 0),
         ])
     body.append(table(
-        ["", "Source", "Tier", "Countries", "Description", "Status", "Ingested"],
+        ["Source name", "Tier", "Countries", "Description", "Status", "Raw postings ingested"],
         spider_rows,
         right_align=(6,),
     ))
@@ -556,7 +644,7 @@ def sources_view(db: Session = Depends(get_db)) -> HTMLResponse:
             Raw(_status_pill(getattr(c, "status", "scaffolded"))),
         ])
     body.append(table(
-        ["Country", "Connector", "Dataset", "Cadence", "Granularity", "Status"],
+        ["Country", "Connector name", "Dataset", "Update cadence", "Granularity", "Status"],
         gov_rows,
     ))
 
@@ -604,7 +692,7 @@ def lmi_view(db: Session = Depends(get_db),
         )
     else:
         body = toolbar + table(
-            ["Occupation overlay", "Region", "NOC", "Shortage", "Employment", "Median wage", "36m projection", "Source"],
+            ["Occupation overlay", "Region", "NOC code", "Shortage", "Employed", "Median wage", "36m projection", "Source dataset"],
             [
                 [
                     r.industrial_overlay_code or "—",
@@ -618,10 +706,14 @@ def lmi_view(db: Session = Depends(get_db),
                 ]
                 for r in rows
             ],
-            right_align=(4, 5),
+            right_align=(5, 6),
         )
-    return HTMLResponse(page("Labor market", body, current_path="/ui/lmi",
-                             subtitle="Government LMI snapshot (StatCan LFS + BuildForce). Sorted by shortage indicator."))
+    return HTMLResponse(page(
+        "Labor Market",
+        body,
+        current_path="/ui/lmi",
+        subtitle="Government LMI snapshot (StatCan LFS + BuildForce). Sorted by shortage indicator.",
+    ))
 
 
 # ============================================================

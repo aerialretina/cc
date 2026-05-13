@@ -25,7 +25,7 @@ from lip.db import get_db
 from lip.enrichment.pipeline import _enrich_in_session
 from lip.logging import get_logger
 from lip.models import Posting, RawPosting
-from lip.scraping.registry import get_spider, list_spiders
+from lip.scraping.registry import all_spider_classes, get_spider, list_spiders
 from lip.scraping.storage import archive_to_s3, upsert_raw_posting
 
 logger = get_logger(__name__)
@@ -176,3 +176,83 @@ def seed_lmi(db: Session = Depends(get_db)) -> dict:
     from lip.seed_lmi import apply
 
     return apply(db).model_dump()
+
+
+@router.post("/scrape-all", dependencies=[Depends(_require_admin)])
+def scrape_all(
+    db: Session = Depends(get_db),
+    max_postings_per_spider: int = 20,
+) -> dict:
+    """Run every registered spider in sequence with a low per-spider cap.
+
+    Designed to fit inside Fly's HTTP timeout: 25 spiders x 20 postings
+    cap x resilient error handling = a couple of minutes worst case,
+    seconds for most because upstream often returns errors before
+    yielding anything.
+
+    Returns a per-spider summary so the operator can see which sources
+    are reachable from Fly's egress and which need a partner API key,
+    a proxy, or a worker process to ingest.
+    """
+    started = time.monotonic()
+    results: list[dict] = []
+    for spider_cls in all_spider_classes():
+        name = spider_cls.source_name
+        spider = spider_cls()
+        seen = 0
+        ingested = 0
+        enriched = 0
+        upstream_error: str | None = None
+        try:
+            for scraped in spider.crawl():
+                seen += 1
+                try:
+                    s3_key = archive_to_s3(scraped)
+                except Exception:
+                    logger.exception("s3_archive_failed", source=name)
+                    s3_key = None
+                upsert_raw_posting(scraped, s3_key=s3_key)
+                ingested += 1
+                raw = db.execute(
+                    select(RawPosting).where(
+                        RawPosting.source == scraped.source,
+                        RawPosting.source_posting_id == scraped.source_posting_id,
+                    )
+                ).scalar_one_or_none()
+                if raw is not None:
+                    try:
+                        _enrich_in_session(db, raw)
+                        db.commit()
+                        enriched += 1
+                    except Exception:
+                        db.rollback()
+                        logger.exception("enrich_failed", source=name)
+                if seen >= max_postings_per_spider:
+                    break
+        except Exception as e:
+            logger.exception("spider_crawl_failed", source=name)
+            upstream_error = f"{type(e).__name__}: {e}"
+            db.rollback()
+
+        results.append({
+            "spider": name,
+            "seen": seen,
+            "ingested_raw": ingested,
+            "enriched": enriched,
+            "upstream_error": upstream_error,
+        })
+
+    canonical_total = int(db.scalar(select(func.count()).select_from(Posting)) or 0)
+    raw_total = int(db.scalar(select(func.count()).select_from(RawPosting)) or 0)
+
+    successful = sum(1 for r in results if r["upstream_error"] is None and r["seen"] > 0)
+    failed = sum(1 for r in results if r["upstream_error"] is not None)
+    return {
+        "spiders_run": len(results),
+        "spiders_with_ingestion": successful,
+        "spiders_failed": failed,
+        "took_seconds": round(time.monotonic() - started, 2),
+        "canonical_postings_total": canonical_total,
+        "raw_postings_total": raw_total,
+        "per_spider": results,
+    }

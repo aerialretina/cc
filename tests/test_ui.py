@@ -47,7 +47,7 @@ def test_index_renders_with_empty_db():
     resp = _client().get("/")
     assert resp.status_code == 200
     assert resp.headers["content-type"].startswith("text/html")
-    assert "Labor intelligence platform" in resp.text
+    assert "Labor Intelligence Platform" in resp.text
     # Stat cards present
     assert "Active postings" in resp.text
     assert "Organizations" in resp.text
