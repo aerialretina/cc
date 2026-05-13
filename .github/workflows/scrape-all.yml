@@ -1,15 +1,15 @@
 name: Scrape all sources on laborint
 
-# UI-only fan-out: POSTs /admin/scrape-all so every registered spider
-# runs once with a low per-spider cap. The endpoint is resilient — a
-# flaky source returns upstream_error in its per-spider summary rather
-# than crashing the run.
+# UI-only fan-out. The workflow drives the loop (rather than the server
+# doing it in one long request), so each call to /admin/scrape/{name}
+# stays well inside Fly's HTTP timeout and per-spider progress shows
+# up live in the Actions log.
 
 on:
   workflow_dispatch:
     inputs:
       max_postings_per_spider:
-        description: Per-spider posting cap (keeps the request inside Fly's HTTP timeout)
+        description: Per-spider posting cap
         required: true
         default: "20"
         type: string
@@ -24,7 +24,7 @@ jobs:
     name: scrape-all
     runs-on: ubuntu-latest
     steps:
-      - name: POST /admin/scrape-all
+      - name: Fan out across registered spiders
         env:
           ADMIN_TOKEN: ${{ secrets.LIP_ADMIN_TOKEN }}
           MAX: ${{ inputs.max_postings_per_spider }}
@@ -35,19 +35,72 @@ jobs:
             echo "::error::LIP_ADMIN_TOKEN repo secret is not set"
             exit 1
           fi
-          http_status=$(curl -sS -o response.json -w "%{http_code}" \
-            -X POST \
+
+          echo "== Fetching registered spider list =="
+          status=$(curl -sS -o spiders.json -w "%{http_code}" \
             -H "X-Admin-Token: ${ADMIN_TOKEN}" \
-            --max-time 540 \
-            "${BASE_URL}/admin/scrape-all?max_postings_per_spider=${MAX}")
-          echo "HTTP ${http_status}"
-          echo "----- response -----"
-          if command -v jq >/dev/null && [ -s response.json ]; then
-            jq . response.json || cat response.json
-          else
-            cat response.json
-          fi
-          echo
-          if [ "${http_status}" != "200" ]; then
+            "${BASE_URL}/admin/spiders")
+          if [ "${status}" != "200" ]; then
+            echo "::error::GET /admin/spiders returned HTTP ${status}"
+            cat spiders.json
             exit 1
           fi
+          spiders=$(jq -r '.spiders[]' spiders.json)
+          count=$(echo "${spiders}" | wc -l | tr -d ' ')
+          echo "Found ${count} spiders"
+          echo
+
+          total_seen=0
+          total_ingested=0
+          total_enriched=0
+          ok_count=0
+          fail_count=0
+          empty_count=0
+
+          while IFS= read -r name; do
+            [ -z "${name}" ] && continue
+            printf "%-30s " "${name}"
+            status=$(curl -sS -o resp.json -w "%{http_code}" \
+              -X POST \
+              -H "X-Admin-Token: ${ADMIN_TOKEN}" \
+              --max-time 90 \
+              "${BASE_URL}/admin/scrape/${name}?max_postings=${MAX}" || echo "000")
+            if [ "${status}" != "200" ]; then
+              fail_count=$((fail_count + 1))
+              detail=$(jq -r '.detail // "(no detail)"' resp.json 2>/dev/null || echo "(no body)")
+              printf "HTTP %s  %s\n" "${status}" "${detail}"
+              continue
+            fi
+            seen=$(jq -r '.seen // 0' resp.json)
+            ingested=$(jq -r '.ingested_raw // 0' resp.json)
+            enriched=$(jq -r '.enriched // 0' resp.json)
+            err=$(jq -r '.upstream_error // empty' resp.json)
+            total_seen=$((total_seen + seen))
+            total_ingested=$((total_ingested + ingested))
+            total_enriched=$((total_enriched + enriched))
+            if [ -n "${err}" ]; then
+              fail_count=$((fail_count + 1))
+              printf "ERROR   seen=%s  -- %s\n" "${seen}" "${err}"
+            elif [ "${seen}" = "0" ]; then
+              empty_count=$((empty_count + 1))
+              printf "EMPTY   no postings yielded\n"
+            else
+              ok_count=$((ok_count + 1))
+              printf "OK      seen=%s  ingested=%s  enriched=%s\n" "${seen}" "${ingested}" "${enriched}"
+            fi
+          done <<< "${spiders}"
+
+          echo
+          echo "================ summary ================"
+          echo "Spiders run:           ${count}"
+          echo "  succeeded (seen>0):  ${ok_count}"
+          echo "  upstream-empty:      ${empty_count}"
+          echo "  failed:              ${fail_count}"
+          echo "Totals across spiders: seen=${total_seen} ingested=${total_ingested} enriched=${total_enriched}"
+
+          echo
+          echo "== Final canonical / raw counts =="
+          curl -sS -H "X-Admin-Token: ${ADMIN_TOKEN}" \
+            -X POST --max-time 30 \
+            "${BASE_URL}/admin/scrape/job_bank_canada?max_postings=0" \
+            | jq '{canonical_postings_total, raw_postings_total}' || true
