@@ -116,6 +116,11 @@ class Posting(UUIDPKMixin, TimestampMixin, Base):
     source_count: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     dedup_key: Mapped[str] = mapped_column(String(128), nullable=False)
 
+    # URL the candidate hits to apply. Scraped postings populate this
+    # from the source posting URL; seed data falls back to the org's
+    # careers page.
+    apply_url: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+
     # Confidence on enrichment fields (0..1). See §6.1.
     confidence: Mapped[dict] = mapped_column(JSONB, nullable=False, server_default="{}")
 

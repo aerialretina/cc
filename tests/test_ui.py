@@ -47,15 +47,16 @@ def test_index_renders_with_empty_db():
     resp = _client().get("/")
     assert resp.status_code == 200
     assert resp.headers["content-type"].startswith("text/html")
-    assert "Labor Intelligence Platform" in resp.text
-    assert "canonical postings" in resp.text
-    assert "job_bank_canada" in resp.text
+    assert "Labor intelligence platform" in resp.text
+    # Stat cards present
+    assert "Active postings" in resp.text
+    assert "Organizations" in resp.text
 
 
 def test_postings_view_shows_empty_state():
     resp = _client().get("/ui/postings")
     assert resp.status_code == 200
-    assert "No canonical postings yet" in resp.text
+    assert "No matching postings yet" in resp.text
 
 
 def test_organizations_view_shows_empty_state():
@@ -76,10 +77,18 @@ def test_projects_view_shows_empty_state():
     assert "No projects yet" in resp.text
 
 
+def test_lmi_view_shows_empty_state():
+    resp = _client().get("/ui/lmi")
+    assert resp.status_code == 200
+    assert "No LMI snapshots yet" in resp.text
+
+
 def test_nav_present_on_every_page():
     client = _client()
-    for path in ("/", "/ui/postings", "/ui/organizations", "/ui/compensation", "/ui/projects"):
+    for path in ("/", "/ui/postings", "/ui/organizations", "/ui/compensation",
+                 "/ui/projects", "/ui/lmi"):
         resp = client.get(path)
         assert resp.status_code == 200, path
-        for href in ("/ui/postings", "/ui/organizations", "/ui/compensation", "/ui/projects"):
+        for href in ("/ui/postings", "/ui/organizations", "/ui/compensation",
+                     "/ui/projects", "/ui/lmi"):
             assert href in resp.text, f"{href} missing in {path}"

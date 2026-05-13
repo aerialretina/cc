@@ -27,6 +27,7 @@ from lip.models import (
     Project,
     RawPosting,
 )
+from lip.seed_org_summaries import SUMMARIES as ORG_SUMMARIES
 
 NOW = datetime.now(UTC)
 TODAY = date.today()
@@ -680,11 +681,16 @@ def apply(db: Session) -> SeedDemoResult:
         existing = db.execute(
             select(Organization).where(Organization.canonical_name == spec["canonical_name"])
         ).scalar_one_or_none()
+        spec_with_summary = dict(spec, summary=ORG_SUMMARIES.get(spec["canonical_name"]))
         if existing is None:
-            existing = Organization(**spec)
+            existing = Organization(**spec_with_summary)
             db.add(existing)
             db.flush()
             orgs_added += 1
+        else:
+            # Refresh summary on every run so editorial updates land.
+            if spec_with_summary["summary"]:
+                existing.summary = spec_with_summary["summary"]
         org_by_name[spec["canonical_name"]] = existing
 
     postings_added = 0
@@ -723,6 +729,7 @@ def apply(db: Session) -> SeedDemoResult:
             is_active=True,
             source_count=1,
             dedup_key=dedup_key,
+            apply_url=org.careers_url or org.website,
             confidence={"occupation": 0.95, "source": "seed-demo"},
         )
         db.add(posting)

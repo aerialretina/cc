@@ -74,6 +74,10 @@ ignore = ["E501", "B008", "N802"]
 # Compensation regex deliberately accepts en-dash (typographic range marker)
 # in addition to the ASCII hyphen — the literal must appear in source.
 "src/lip/enrichment/compensation.py" = ["RUF001"]
+# UI uses the typographic en-dash for salary ranges and short-dash for
+# em-dash in copy. Allow both in this file.
+"src/lip/ui/render.py" = ["RUF001"]
+"src/lip/ui/router.py" = ["RUF001", "RUF005"]
 
 [tool.mypy]
 python_version = "3.11"

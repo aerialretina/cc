@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Boolean, Index, Integer, String
+from sqlalchemy import Boolean, Index, Integer, String, Text
 from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -42,6 +42,10 @@ class Organization(UUIDPKMixin, TimestampMixin, Base):
 
     website: Mapped[str | None] = mapped_column(String(512), nullable=True)
     careers_url: Mapped[str | None] = mapped_column(String(512), nullable=True)
+
+    summary: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Short factual paragraph describing the org. Sourced at seed time
+    # from public company profiles; refreshed periodically.
 
     roles: Mapped[list[Role]] = relationship(back_populates="organization")
     postings: Mapped[list[Posting]] = relationship(back_populates="organization")
