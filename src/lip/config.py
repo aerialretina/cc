@@ -6,7 +6,7 @@ All settings are namespaced with the ``LIP_`` prefix. See ``.env.example``.
 from functools import lru_cache
 from typing import Literal
 
-from pydantic import Field
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -42,6 +42,21 @@ class Settings(BaseSettings):
 
     semantic_dedup_threshold: float = Field(default=0.92, ge=0.0, le=1.0)
     cross_source_dedup_window_days: int = 60
+
+    @field_validator("database_url")
+    @classmethod
+    def _normalize_database_url(cls, v: str) -> str:
+        """Accept any common Postgres URL shape and route it through psycopg v3.
+
+        Heroku/Render/Fly's `fly mpg attach` emit `postgres://...`; some tools
+        emit `postgresql://...`. SQLAlchemy needs a driver hint
+        (`postgresql+psycopg://`) to pick psycopg v3, so we add it here.
+        """
+        if v.startswith("postgres://"):
+            v = "postgresql+psycopg://" + v[len("postgres://") :]
+        elif v.startswith("postgresql://"):
+            v = "postgresql+psycopg://" + v[len("postgresql://") :]
+        return v
 
 
 @lru_cache
