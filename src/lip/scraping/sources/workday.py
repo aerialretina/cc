@@ -211,3 +211,212 @@ class HydroOneWorkdaySpider(_WorkdayBase):
     cluster = "wd3"
     site = "External"
     company_label = "Hydro One"
+
+
+# ---- additional Canadian industrial Workday tenants ----------------------
+# Tenant slugs are best-guesses against company naming conventions. A 404
+# at runtime is informative — flip ``status = "live"`` on each class once
+# the tenant URL is verified end-to-end and the response shape parses.
+
+class StantecWorkdaySpider(_WorkdayBase):
+    source_name = "workday_stantec"
+    description = "Stantec — Workday ATS."
+    tier = 1
+    countries = ("CA", "US")
+    homepage = "https://stantec.com/careers"
+    tenant = "stantec"
+    cluster = "wd1"
+    site = "External"
+    company_label = "Stantec"
+
+
+class WSPWorkdaySpider(_WorkdayBase):
+    source_name = "workday_wsp"
+    description = "WSP Canada — Workday ATS."
+    tier = 1
+    countries = ("CA",)
+    homepage = "https://wsp.com/en-ca/careers"
+    tenant = "wsp"
+    cluster = "wd3"
+    site = "External"
+    company_label = "WSP Canada"
+
+
+class FluorWorkdaySpider(_WorkdayBase):
+    source_name = "workday_fluor"
+    description = "Fluor Corporation — Workday ATS."
+    tier = 1
+    countries = ("CA", "US")
+    homepage = "https://www.fluor.com/careers"
+    tenant = "fluor"
+    cluster = "wd5"
+    site = "External"
+    company_label = "Fluor"
+
+
+class JacobsWorkdaySpider(_WorkdayBase):
+    source_name = "workday_jacobs"
+    description = "Jacobs — Workday ATS."
+    tier = 1
+    countries = ("CA", "US")
+    homepage = "https://careers.jacobs.com"
+    tenant = "jacobsengineering"
+    cluster = "wd1"
+    site = "External"
+    company_label = "Jacobs"
+
+
+class WoodWorkdaySpider(_WorkdayBase):
+    source_name = "workday_wood"
+    description = "Wood plc — Workday ATS."
+    tier = 1
+    countries = ("CA",)
+    homepage = "https://www.woodplc.com/careers"
+    tenant = "wood"
+    cluster = "wd3"
+    site = "External"
+    company_label = "Wood plc"
+
+
+class WorleyWorkdaySpider(_WorkdayBase):
+    source_name = "workday_worley"
+    description = "Worley — Workday ATS."
+    tier = 1
+    countries = ("CA",)
+    homepage = "https://careers.worley.com"
+    tenant = "worley"
+    cluster = "wd5"
+    site = "External"
+    company_label = "Worley"
+
+
+class TCEnergyWorkdaySpider(_WorkdayBase):
+    source_name = "workday_tcenergy"
+    description = "TC Energy — Workday ATS."
+    tier = 1
+    countries = ("CA", "US")
+    homepage = "https://careers.tcenergy.com"
+    tenant = "tcenergy"
+    cluster = "wd3"
+    site = "External"
+    company_label = "TC Energy"
+
+
+class CenovusWorkdaySpider(_WorkdayBase):
+    source_name = "workday_cenovus"
+    description = "Cenovus Energy — Workday ATS."
+    tier = 1
+    countries = ("CA",)
+    homepage = "https://www.cenovus.com/careers"
+    tenant = "cenovus"
+    cluster = "wd5"
+    site = "External"
+    company_label = "Cenovus Energy"
+
+
+class ImperialOilWorkdaySpider(_WorkdayBase):
+    source_name = "workday_imperialoil"
+    description = "Imperial Oil — Workday ATS."
+    tier = 1
+    countries = ("CA",)
+    homepage = "https://careers.imperialoil.ca"
+    tenant = "imperialoil"
+    cluster = "wd5"
+    site = "External"
+    company_label = "Imperial Oil"
+
+
+class CNRLWorkdaySpider(_WorkdayBase):
+    source_name = "workday_cnrl"
+    description = "Canadian Natural Resources — Workday ATS."
+    tier = 1
+    countries = ("CA",)
+    homepage = "https://www.cnrl.com/careers"
+    tenant = "cnrl"
+    cluster = "wd5"
+    site = "External"
+    company_label = "Canadian Natural Resources"
+
+
+class ATCOWorkdaySpider(_WorkdayBase):
+    source_name = "workday_atco"
+    description = "ATCO Group — Workday ATS."
+    tier = 1
+    countries = ("CA",)
+    homepage = "https://www.atco.com/careers"
+    tenant = "atco"
+    cluster = "wd5"
+    site = "External"
+    company_label = "ATCO"
+
+
+class BirdWorkdaySpider(_WorkdayBase):
+    source_name = "workday_bird"
+    description = "Bird Construction — Workday ATS."
+    tier = 1
+    countries = ("CA",)
+    homepage = "https://www.bird.ca/careers"
+    tenant = "bird"
+    cluster = "wd3"
+    site = "External"
+    company_label = "Bird Construction"
+
+
+class AeconWorkdaySpider(_WorkdayBase):
+    source_name = "workday_aecon"
+    description = "Aecon Group — Workday ATS."
+    tier = 1
+    countries = ("CA",)
+    homepage = "https://careers.aecon.com"
+    tenant = "aecon"
+    cluster = "wd5"
+    site = "External"
+    company_label = "Aecon Group"
+
+
+class TransAltaWorkdaySpider(_WorkdayBase):
+    source_name = "workday_transalta"
+    description = "TransAlta — Workday ATS."
+    tier = 1
+    countries = ("CA",)
+    homepage = "https://transalta.com/careers"
+    tenant = "transalta"
+    cluster = "wd5"
+    site = "External"
+    company_label = "TransAlta"
+
+
+class NewmontWorkdaySpider(_WorkdayBase):
+    source_name = "workday_newmont"
+    description = "Newmont — Workday ATS."
+    tier = 1
+    countries = ("CA", "US")
+    homepage = "https://www.newmont.com/careers"
+    tenant = "newmont"
+    cluster = "wd5"
+    site = "External"
+    company_label = "Newmont"
+
+
+class AgnicoEagleWorkdaySpider(_WorkdayBase):
+    source_name = "workday_agnicoeagle"
+    description = "Agnico Eagle Mines — Workday ATS."
+    tier = 1
+    countries = ("CA",)
+    homepage = "https://www.agnicoeagle.com/careers"
+    tenant = "agnicoeagle"
+    cluster = "wd5"
+    site = "External"
+    company_label = "Agnico Eagle Mines"
+
+
+class PembinaWorkdaySpider(_WorkdayBase):
+    source_name = "workday_pembina"
+    description = "Pembina Pipeline — Workday ATS."
+    tier = 1
+    countries = ("CA",)
+    homepage = "https://www.pembina.com/careers"
+    tenant = "pembina"
+    cluster = "wd5"
+    site = "External"
+    company_label = "Pembina Pipeline"

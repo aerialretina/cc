@@ -63,3 +63,14 @@ class Spider(abc.ABC):
     def crawl(self) -> Iterator[ScrapedPosting]:
         """Yield postings discovered in a single crawl run."""
         raise NotImplementedError
+
+    @classmethod
+    def is_configured(cls) -> bool:
+        """Whether the spider has the prerequisite secrets it needs to run.
+
+        Default True — most spiders have no required config. Override on
+        any spider that depends on an API key or partner credential
+        (e.g. Adzuna requires LIP_ADZUNA_APP_ID + LIP_ADZUNA_APP_KEY).
+        Drives the "config missing" pill on /ui/sources.
+        """
+        return True

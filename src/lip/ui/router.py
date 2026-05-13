@@ -226,7 +226,7 @@ def postings_view(
     overlay: str | None = Query(default=None),
     seniority: str | None = Query(default=None),
     sort: str = Query(default="recent"),
-    limit: int = Query(default=100, le=500),
+    limit: int = Query(default=1000, le=5000),
 ) -> HTMLResponse:
     stmt = select(Posting).where(Posting.is_active.is_(True))
     if region:
@@ -425,7 +425,7 @@ def organization_detail(org_id: UUID, db: Session = Depends(get_db)) -> HTMLResp
         select(Posting)
         .where(Posting.organization_id == org_id)
         .order_by(Posting.last_seen_at.desc())
-        .limit(50)
+        .limit(500)
     ).all()
 
     summary_html = org.summary or '<span class="muted">No summary on file.</span>'
@@ -617,13 +617,17 @@ def sources_view(db: Session = Depends(get_db)) -> HTMLResponse:
     body.append('<h2>Job-posting sources</h2>')
     spider_rows = []
     for s in spiders:
+        configured = s.is_configured()
+        status_pill_html = _status_pill(s.status)
+        if not configured:
+            status_pill_html = pill("config missing", variant="danger")
         spider_rows.append([
             LinkedRow(s.homepage or "#"),
             s.source_name,
             Raw(pill(_TIER_LABEL.get(s.tier, f"Tier {s.tier}"), variant="accent")),
             Raw(pills(s.countries) if s.countries else "—"),
             s.description or "—",
-            Raw(_status_pill(s.status)),
+            Raw(status_pill_html),
             ingested.get(s.source_name, 0),
         ])
     body.append(table(

@@ -9,21 +9,14 @@ from lip.scraping.sources.adecco import (
     AkkodisSpider,
 )
 from lip.scraping.sources.adzuna import AdzunaCanadaSpider
-from lip.scraping.sources.ashby import AshbyExampleSpider
 from lip.scraping.sources.eluta import ElutaSpider
 from lip.scraping.sources.greenhouse import StantecGreenhouseSpider, WSPGreenhouseSpider
 from lip.scraping.sources.job_bank_canada import JobBankCanadaSpider
 from lip.scraping.sources.kelly import KellyCanadaSpider, KellyUSSpider
 from lip.scraping.sources.lever import ChandosLeverSpider
-from lip.scraping.sources.personio import PersonioExampleSpider
 from lip.scraping.sources.randstad import (
     RandstadCanadaSpider,
     RandstadUSSpider,
-)
-from lip.scraping.sources.recruitee import RecruiteeExampleSpider
-from lip.scraping.sources.smartrecruiters import (
-    BoschSmartRecruitersSpider,
-    IkeaSmartRecruitersSpider,
 )
 from lip.scraping.sources.tier1_careers import (
     AeconCareersSpider,
@@ -46,34 +39,49 @@ from lip.scraping.sources.vertical_boards import (
 )
 from lip.scraping.sources.workbc import WorkBCSpider
 from lip.scraping.sources.workday import (
+    AeconWorkdaySpider,
+    AgnicoEagleWorkdaySpider,
+    ATCOWorkdaySpider,
     AtkinsRealisWorkdaySpider,
+    BirdWorkdaySpider,
     CamecoWorkdaySpider,
+    CenovusWorkdaySpider,
+    CNRLWorkdaySpider,
     EnbridgeWorkdaySpider,
+    FluorWorkdaySpider,
     HydroOneWorkdaySpider,
+    ImperialOilWorkdaySpider,
+    JacobsWorkdaySpider,
+    NewmontWorkdaySpider,
     OPGWorkdaySpider,
     PCLWorkdaySpider,
+    PembinaWorkdaySpider,
+    StantecWorkdaySpider,
     SuncorWorkdaySpider,
+    TCEnergyWorkdaySpider,
     TeckWorkdaySpider,
+    TransAltaWorkdaySpider,
+    WoodWorkdaySpider,
+    WorleyWorkdaySpider,
+    WSPWorkdaySpider,
 )
 
 _CLASSES: tuple[type[Spider], ...] = (
     # Tier 3 — aggregator API (BIGGEST unlock for SMB / long-tail coverage)
     AdzunaCanadaSpider,
-    # Tier 1 — ATS APIs (highest signal: stable JSON endpoints, no bot challenge)
-    # Workday
+    # Tier 1 — Canadian-industrial ATS tenants on Workday (highest signal,
+    # stable JSON endpoints, no bot challenge).
     PCLWorkdaySpider, OPGWorkdaySpider, SuncorWorkdaySpider,
     CamecoWorkdaySpider, EnbridgeWorkdaySpider, AtkinsRealisWorkdaySpider,
     TeckWorkdaySpider, HydroOneWorkdaySpider,
-    # Greenhouse
-    StantecGreenhouseSpider, WSPGreenhouseSpider,
-    # Lever
-    ChandosLeverSpider,
-    # SmartRecruiters (mid-market standard)
-    BoschSmartRecruitersSpider, IkeaSmartRecruitersSpider,
-    # Ashby (growth-stage / newer mid-market)
-    AshbyExampleSpider,
-    # Recruitee / Personio (SMB / mid-market)
-    RecruiteeExampleSpider, PersonioExampleSpider,
+    StantecWorkdaySpider, WSPWorkdaySpider, FluorWorkdaySpider,
+    JacobsWorkdaySpider, WoodWorkdaySpider, WorleyWorkdaySpider,
+    TCEnergyWorkdaySpider, CenovusWorkdaySpider, ImperialOilWorkdaySpider,
+    CNRLWorkdaySpider, ATCOWorkdaySpider, BirdWorkdaySpider,
+    AeconWorkdaySpider, TransAltaWorkdaySpider, NewmontWorkdaySpider,
+    AgnicoEagleWorkdaySpider, PembinaWorkdaySpider,
+    # Other ATS platforms (concrete tenants pending verification)
+    StantecGreenhouseSpider, WSPGreenhouseSpider, ChandosLeverSpider,
     # Tier 1 — direct company careers (HTML scrape fallback)
     PCLCareersSpider, AeconCareersSpider, EllisDonCareersSpider,
     SuncorCareersSpider, TCEnergyCareersSpider, EnbridgeCareersSpider,

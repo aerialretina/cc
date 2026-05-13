@@ -150,3 +150,8 @@ class AdzunaCanadaSpider(_AdzunaBase):
     countries = ("CA",)
     homepage = "https://www.adzuna.ca"
     country_path = "ca"
+
+    @classmethod
+    def is_configured(cls) -> bool:
+        s = get_settings()
+        return bool(s.adzuna_app_id and s.adzuna_app_key)
