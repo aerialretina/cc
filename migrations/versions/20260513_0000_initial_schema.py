@@ -71,15 +71,15 @@ def upgrade() -> None:
     skill_category = postgresql.ENUM(
         "technical", "software", "certification", "equipment", "methodology", "safety",
         name="skill_category",
-        create_type=True,
+        create_type=False,
     )
-    skill_category.create(op.get_bind())
+    skill_category.create(op.get_bind(), checkfirst=True)
 
     op.create_table(
         "skill",
         sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
         sa.Column("canonical_name", sa.String(255), nullable=False, unique=True),
-        sa.Column("category", sa.Enum(name="skill_category", create_type=False), nullable=False),
+        sa.Column("category", skill_category, nullable=False),
         sa.Column("description", sa.String(1024), nullable=True),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()),
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()),
@@ -224,9 +224,9 @@ def upgrade() -> None:
     comp_source_type = postgresql.ENUM(
         "placement_verified", "posted", "modeled", "self_reported", "third_party",
         name="comp_source_type",
-        create_type=True,
+        create_type=False,
     )
-    comp_source_type.create(op.get_bind())
+    comp_source_type.create(op.get_bind(), checkfirst=True)
 
     op.create_table(
         "compensation_record",
@@ -244,7 +244,7 @@ def upgrade() -> None:
         sa.Column("amount_high", sa.Numeric(12, 2), nullable=True),
         sa.Column("currency", sa.String(3), nullable=False, server_default="USD"),
         sa.Column("period", sa.String(16), nullable=False, server_default="annual"),
-        sa.Column("source_type", sa.Enum(name="comp_source_type", create_type=False), nullable=False),
+        sa.Column("source_type", comp_source_type, nullable=False),
         sa.Column("confidence", sa.Numeric(3, 2), nullable=False, server_default="0.5"),
         sa.Column("observed_on", sa.Date, nullable=False),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()),
@@ -260,14 +260,14 @@ def upgrade() -> None:
         "placement_confirmed", "candidate_declined", "early_departure",
         "client_engaged", "candidate_outreach", "candidate_response",
         name="recruiter_event_type",
-        create_type=True,
+        create_type=False,
     )
-    recruiter_event_type.create(op.get_bind())
+    recruiter_event_type.create(op.get_bind(), checkfirst=True)
 
     op.create_table(
         "recruiter_interaction",
         sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
-        sa.Column("event_type", sa.Enum(name="recruiter_event_type", create_type=False), nullable=False),
+        sa.Column("event_type", recruiter_event_type, nullable=False),
         sa.Column("occurred_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("person_id", postgresql.UUID(as_uuid=True),
                   sa.ForeignKey("person.id", ondelete="CASCADE"), nullable=True),
