@@ -8,9 +8,24 @@ End state: every push to this branch automatically deploys to
 
 ### 1. Get a Fly API token
 
-1. Open <https://fly.io/user/personal_access_tokens>.
-2. Click **Create access token**, name it `github-actions`, save it.
+Use a **deploy token** scoped to the app — it works in SSO-locked orgs
+where personal access tokens are disabled.
+
+1. Open <https://fly.io/apps/laborint/tokens>.
+2. Click **Create Deploy Token**, name it `github-actions`, save it.
    You'll see the token once — copy it somewhere safe for the next step.
+
+If that page errors out (older UI) or your org disables app-scoped
+tokens, use the org tokens page instead:
+
+- Open <https://fly.io/dashboard> → click the org → **Tokens** in the
+  sidebar → **Create Token** → save it.
+
+If you see a banner saying *"Access Tokens cannot be created for your
+account because an organization you are a member of requires Single
+Sign On (SSO)"*, that refers specifically to **personal** tokens —
+deploy tokens and org tokens are still available via the two URLs
+above.
 
 ### 2. Put the token into GitHub
 
