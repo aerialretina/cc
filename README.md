@@ -41,6 +41,22 @@ live DB. Routes: `/`, `/ui/postings`, `/ui/organizations`,
 `/ui/compensation`, `/ui/projects`. The OpenAPI explorer remains at
 `/docs`.
 
+## Deploy to a public URL
+
+`Dockerfile` + `fly.toml` ship in the repo. Walkthrough:
+[`docs/deploy-fly.md`](docs/deploy-fly.md). Short version:
+
+```bash
+fly launch --no-deploy --copy-config
+fly mpg create --name lip-db && fly mpg attach lip-db --app <your-app>
+fly secrets set LIP_DATABASE_URL="$(fly mpg connect lip-db --print-url)" --app <your-app>
+fly deploy
+```
+
+The image runs `alembic upgrade head` on every container boot, so the
+schema lands automatically. `auto_stop_machines = true` keeps the cost
+near-zero while the app is idle.
+
 Run the worker in another shell:
 
 ```bash
