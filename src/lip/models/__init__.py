@@ -13,6 +13,7 @@ holds the deduplicated, enriched record that downstream queries hit.
 from lip.models.base import Base, TimestampMixin
 from lip.models.compensation import CompensationRecord
 from lip.models.hiring import HiringEvent
+from lip.models.lmi import LmiSnapshot
 from lip.models.organization import Organization
 from lip.models.person import Person
 from lip.models.posting import Posting, RawPosting
@@ -25,6 +26,7 @@ __all__ = [
     "Base",
     "CompensationRecord",
     "HiringEvent",
+    "LmiSnapshot",
     "Organization",
     "Person",
     "Posting",

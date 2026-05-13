@@ -151,7 +151,7 @@ def scrape(
     dependencies=[Depends(_require_admin)],
 )
 def seed_demo(db: Session = Depends(get_db)) -> SeedDemoResult:
-    """Insert a small set of realistic industrial postings + orgs.
+    """Insert the curated Canadian industrial seed dataset.
 
     Used to populate the UI when the live spider is temporarily blocked
     (upstream 5xx, geo-blocked egress, etc.). Idempotent — re-running
@@ -160,3 +160,19 @@ def seed_demo(db: Session = Depends(get_db)) -> SeedDemoResult:
     from lip.seed_demo import apply
 
     return apply(db)
+
+
+@router.post(
+    "/seed-lmi",
+    dependencies=[Depends(_require_admin)],
+)
+def seed_lmi(db: Session = Depends(get_db)) -> dict:
+    """Insert the curated Canadian LMI snapshot (StatCan + BuildForce).
+
+    Populates the ``lmi_snapshot`` table that powers ``/ui/lmi`` and the
+    ``/v1/labor-supply`` API. Idempotent on
+    (region, occupation, source, observed_period).
+    """
+    from lip.seed_lmi import apply
+
+    return apply(db).model_dump()

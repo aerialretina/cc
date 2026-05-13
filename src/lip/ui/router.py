@@ -13,6 +13,7 @@ from lip.db import get_db
 from lip.models import (
     CompensationRecord,
     HiringEvent,
+    LmiSnapshot,
     Organization,
     Posting,
     Project,
@@ -38,6 +39,7 @@ def index(db: Session = Depends(get_db)) -> HTMLResponse:
             ("projects", stats["projects"]),
             ("hiring events (placements)", stats["hiring_events"]),
             ("compensation records", stats["compensation"]),
+            ("LMI snapshot rows", stats["lmi"]),
             ("registered spiders", list_spiders()),
             ("industrial overlay codes", len(INDUSTRIAL_OVERLAY)),
         ]
@@ -144,6 +146,43 @@ def compensation_view(db: Session = Depends(get_db), limit: int = 50) -> HTMLRes
     return HTMLResponse(page("Compensation — recent observations", body))
 
 
+@router.get("/ui/lmi", include_in_schema=False)
+def lmi_view(db: Session = Depends(get_db), limit: int = 100) -> HTMLResponse:
+    rows = db.scalars(
+        select(LmiSnapshot)
+        .order_by(
+            LmiSnapshot.shortage_indicator.desc().nullslast(),
+            LmiSnapshot.region_code.asc(),
+            LmiSnapshot.industrial_overlay_code.asc(),
+        )
+        .limit(limit)
+    ).all()
+    if not rows:
+        body = empty_state(
+            "LMI snapshots",
+            "Click 'Run workflow' on `seed-lmi.yml` to load the curated "
+            "StatCan / BuildForce snapshot for Canada.",
+        )
+    else:
+        body = text_table(
+            ["region", "overlay", "NOC", "employed", "median wage", "shortage", "proj 36m", "source"],
+            [
+                [
+                    r.region_code,
+                    r.industrial_overlay_code,
+                    r.occupation_code,
+                    r.employment,
+                    r.median_wage,
+                    r.shortage_indicator,
+                    f"{float(r.projected_change_pct):+.1f}%" if r.projected_change_pct is not None else "—",
+                    r.source,
+                ]
+                for r in rows
+            ],
+        )
+    return HTMLResponse(page("Labor market — supply, wage, shortage (Canada)", body))
+
+
 @router.get("/ui/projects", include_in_schema=False)
 def projects_view(db: Session = Depends(get_db), limit: int = 50) -> HTMLResponse:
     rows = db.scalars(
@@ -188,6 +227,7 @@ def _safe_counts(db: Session) -> dict[str, int]:
         "projects": 0,
         "hiring_events": 0,
         "compensation": 0,
+        "lmi": 0,
     }
     pairs = [
         ("postings", select(func.count()).select_from(Posting)),
@@ -200,6 +240,7 @@ def _safe_counts(db: Session) -> dict[str, int]:
         ("projects", select(func.count()).select_from(Project)),
         ("hiring_events", select(func.count()).select_from(HiringEvent)),
         ("compensation", select(func.count()).select_from(CompensationRecord)),
+        ("lmi", select(func.count()).select_from(LmiSnapshot)),
     ]
     for key, stmt in pairs:
         try:
