@@ -29,7 +29,6 @@ jobs:
   scrape:
     name: scrape
     runs-on: ubuntu-latest
-    environment: fly
     steps:
       - name: POST /admin/scrape
         env:
