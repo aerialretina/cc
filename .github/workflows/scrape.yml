@@ -1,0 +1,57 @@
+name: Trigger scrape on laborint
+
+# UI-only trigger for an ingestion run against the live app. Click
+# "Run workflow" in GitHub Actions, choose a spider + posting cap, and
+# this job POSTs to /admin/scrape/{spider} with the admin token.
+
+on:
+  workflow_dispatch:
+    inputs:
+      spider:
+        description: Spider name (see `/admin/spiders` for the list)
+        required: true
+        default: job_bank_canada
+        type: choice
+        options:
+          - job_bank_canada
+      max_postings:
+        description: Max postings to ingest in this run (cap so the request fits Fly's HTTP timeout)
+        required: true
+        default: "100"
+        type: string
+      base_url:
+        description: App URL
+        required: true
+        default: https://laborint.fly.dev
+        type: string
+
+jobs:
+  scrape:
+    name: scrape
+    runs-on: ubuntu-latest
+    environment: fly
+    steps:
+      - name: POST /admin/scrape
+        env:
+          ADMIN_TOKEN: ${{ secrets.LIP_ADMIN_TOKEN }}
+          SPIDER: ${{ inputs.spider }}
+          MAX_POSTINGS: ${{ inputs.max_postings }}
+          BASE_URL: ${{ inputs.base_url }}
+        run: |
+          set -euo pipefail
+          if [ -z "${ADMIN_TOKEN}" ]; then
+            echo "::error::LIP_ADMIN_TOKEN repo secret is not set"
+            exit 1
+          fi
+          http_status=$(curl -sS -o response.json -w "%{http_code}" \
+            -X POST \
+            -H "X-Admin-Token: ${ADMIN_TOKEN}" \
+            --max-time 300 \
+            "${BASE_URL}/admin/scrape/${SPIDER}?max_postings=${MAX_POSTINGS}")
+          echo "HTTP ${http_status}"
+          echo "----- response -----"
+          cat response.json
+          echo
+          if [ "${http_status}" != "200" ]; then
+            exit 1
+          fi
