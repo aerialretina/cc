@@ -86,11 +86,16 @@ class JobBankCanadaSpider(Spider):
             return {"_html": response.text, "_url": str(response.url)}
 
     def crawl(self) -> Iterator[ScrapedPosting]:
+        from tenacity import RetryError
+
         for prefix in INDUSTRIAL_NOC_PREFIXES:
             for page in range(1, self.max_pages + 1):
                 try:
                     payload = self._fetch_page(prefix, page)
-                except httpx.HTTPError:
+                except (httpx.HTTPError, RetryError):
+                    # Upstream returned 5xx, timed out, or exhausted retries.
+                    # Skip this NOC prefix and move on — a flaky source must
+                    # not crash the whole scrape.
                     logger.exception("job_bank_fetch_failed", noc_prefix=prefix, page=page)
                     break
 

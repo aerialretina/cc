@@ -40,6 +40,16 @@ class ScrapeResult(BaseModel):
     took_seconds: float
     canonical_postings_total: int
     raw_postings_total: int
+    upstream_error: str | None = None
+
+
+class SeedDemoResult(BaseModel):
+    organizations_added: int
+    postings_added: int
+    compensation_added: int
+    projects_added: int
+    canonical_postings_total: int
+    raw_postings_total: int
 
 
 def _require_admin(x_admin_token: str | None = Header(default=None)) -> None:
@@ -84,34 +94,41 @@ def scrape(
     seen = 0
     ingested = 0
     enriched = 0
+    upstream_error: str | None = None
 
-    for scraped in spider.crawl():
-        seen += 1
-        try:
-            s3_key = archive_to_s3(scraped)
-        except Exception:
-            logger.exception("s3_archive_failed", source=name, sid=scraped.source_posting_id)
-            s3_key = None
-        upsert_raw_posting(scraped, s3_key=s3_key)
-        ingested += 1
-
-        raw = db.execute(
-            select(RawPosting).where(
-                RawPosting.source == scraped.source,
-                RawPosting.source_posting_id == scraped.source_posting_id,
-            )
-        ).scalar_one_or_none()
-        if raw is not None:
+    # Spider iteration is wrapped so a flaky source (or an exhausted retry
+    # chain) returns a partial-success summary instead of a 500.
+    try:
+        for scraped in spider.crawl():
+            seen += 1
             try:
-                _enrich_in_session(db, raw)
-                db.commit()
-                enriched += 1
+                s3_key = archive_to_s3(scraped)
             except Exception:
-                db.rollback()
-                logger.exception("enrich_failed", source=name, sid=scraped.source_posting_id)
+                logger.exception("s3_archive_failed", source=name, sid=scraped.source_posting_id)
+                s3_key = None
+            upsert_raw_posting(scraped, s3_key=s3_key)
+            ingested += 1
 
-        if seen >= max_postings:
-            break
+            raw = db.execute(
+                select(RawPosting).where(
+                    RawPosting.source == scraped.source,
+                    RawPosting.source_posting_id == scraped.source_posting_id,
+                )
+            ).scalar_one_or_none()
+            if raw is not None:
+                try:
+                    _enrich_in_session(db, raw)
+                    db.commit()
+                    enriched += 1
+                except Exception:
+                    db.rollback()
+                    logger.exception("enrich_failed", source=name, sid=scraped.source_posting_id)
+
+            if seen >= max_postings:
+                break
+    except Exception as e:
+        logger.exception("spider_crawl_failed", source=name)
+        upstream_error = f"{type(e).__name__}: {e}"
 
     canonical_total = int(db.scalar(select(func.count()).select_from(Posting)) or 0)
     raw_total = int(db.scalar(select(func.count()).select_from(RawPosting)) or 0)
@@ -124,4 +141,22 @@ def scrape(
         took_seconds=round(time.monotonic() - started, 2),
         canonical_postings_total=canonical_total,
         raw_postings_total=raw_total,
+        upstream_error=upstream_error,
     )
+
+
+@router.post(
+    "/seed-demo",
+    response_model=SeedDemoResult,
+    dependencies=[Depends(_require_admin)],
+)
+def seed_demo(db: Session = Depends(get_db)) -> SeedDemoResult:
+    """Insert a small set of realistic industrial postings + orgs.
+
+    Used to populate the UI when the live spider is temporarily blocked
+    (upstream 5xx, geo-blocked egress, etc.). Idempotent — re-running
+    refreshes ``last_seen_at`` on existing rows rather than duplicating.
+    """
+    from lip.seed_demo import apply
+
+    return apply(db)
