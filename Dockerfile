@@ -26,5 +26,6 @@ COPY migrations ./migrations
 
 EXPOSE 8080
 
-# Run schema migrations then serve. Idempotent — safe to re-run on every boot.
-CMD ["sh", "-c", "alembic upgrade head && exec uvicorn lip.api.main:app --host 0.0.0.0 --port 8080"]
+# Boot script prints a DB diagnostic, runs migrations, then execs uvicorn.
+# Idempotent — safe to re-run on every container start.
+CMD ["python", "-m", "lip.boot"]
