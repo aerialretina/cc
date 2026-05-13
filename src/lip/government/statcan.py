@@ -39,7 +39,7 @@ class StatCanConnector:
 
 
 class LFSConnector(StatCanConnector):
-    """Labour Force Survey — employment by NOC × province."""
+    """Labour Force Survey - employment by NOC x province."""
 
     PID_EMPLOYMENT_BY_NOC = "14100023"  # Employment by NOC, monthly
 

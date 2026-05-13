@@ -11,7 +11,7 @@ import abc
 import hashlib
 from collections.abc import Iterator
 from dataclasses import dataclass, field
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 from typing import Any
 
 
@@ -31,7 +31,7 @@ class ScrapedPosting:
     description_text: str | None = None
     raw_payload: str = ""  # canonical raw form (HTML or JSON) used for hashing
     extra: dict[str, Any] = field(default_factory=dict)
-    scraped_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    scraped_at: datetime = field(default_factory=lambda: datetime.now(UTC))
 
     @property
     def html_hash(self) -> str:

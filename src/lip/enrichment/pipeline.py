@@ -6,7 +6,7 @@ dedup pipeline (§1.3) and the §2 enrichment modules.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
 
 from sqlalchemy.orm import Session
@@ -50,7 +50,7 @@ def _enrich_in_session(db: Session, raw: RawPosting) -> Posting:
     org = entity_resolution.resolve_organization(db, raw.company_raw)
     loc = location.resolve(raw.location_raw)
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
 
     if existing is None:
         posting = Posting(

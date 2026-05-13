@@ -7,7 +7,7 @@ relevant, materializes downstream artifacts (e.g. a placement creates a
 
 from __future__ import annotations
 
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 from decimal import Decimal
 from typing import Any
 from uuid import UUID
@@ -30,7 +30,7 @@ def log_event(
 ) -> RecruiterInteraction:
     interaction = RecruiterInteraction(
         event_type=event_type,
-        occurred_at=occurred_at or datetime.now(timezone.utc),
+        occurred_at=occurred_at or datetime.now(UTC),
         person_id=person_id,
         organization_id=organization_id,
         recruiter=recruiter,

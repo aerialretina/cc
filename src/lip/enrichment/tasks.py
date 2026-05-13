@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import update
 
@@ -30,9 +30,9 @@ def run_dedup_sweep(stale_after_days: int = 14) -> int:
 
     Lightcast uses a 60-day rolling dedup window; "active" tightens that
     to a stricter staleness check to reflect that postings drop off
-    aggregator sites within 2–3 weeks.
+    aggregator sites within 2-3 weeks.
     """
-    cutoff = datetime.now(timezone.utc) - timedelta(days=stale_after_days)
+    cutoff = datetime.now(UTC) - timedelta(days=stale_after_days)
     with session_scope() as db:
         result = db.execute(
             update(Posting)

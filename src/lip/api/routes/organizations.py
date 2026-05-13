@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -33,7 +33,7 @@ def hiring_activity(
     if db.get(Organization, org_id) is None:
         raise HTTPException(status_code=404, detail="organization not found")
 
-    cutoff = datetime.now(timezone.utc) - timedelta(days=window_days)
+    cutoff = datetime.now(UTC) - timedelta(days=window_days)
 
     active = db.scalar(
         select(func.count())

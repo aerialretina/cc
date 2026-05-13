@@ -7,7 +7,7 @@ Source-reliability weighting (§6.1):
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from lip.api.schemas import CompensationStats

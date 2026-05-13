@@ -6,7 +6,8 @@ from datetime import date
 from typing import TYPE_CHECKING
 from uuid import UUID
 
-from sqlalchemy import Date, Enum as SAEnum, ForeignKey, Index, Numeric, String
+from sqlalchemy import Date, ForeignKey, Index, Numeric, String
+from sqlalchemy import Enum as SAEnum
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 

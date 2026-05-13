@@ -10,12 +10,16 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
+# The en-dash in the range separator is intentional - postings commonly use
+# the typographic form "120<en-dash>150" rather than the ASCII "120-150".
+_RANGE_SEPARATOR = "[\\-–to]+"  # ASCII hyphen, en-dash (U+2013), or "to"
+
 _RANGE_RE = re.compile(
     r"""
     (?P<currency>\$|CAD|USD|US\$|C\$)?\s*
     (?P<low>\d{1,3}(?:,\d{3})*(?:\.\d+)?)
     \s*[kK]?\s*
-    (?:[\-–to]+)\s*
+    (?:""" + _RANGE_SEPARATOR + r""")\s*
     (?P<currency2>\$|CAD|USD|US\$|C\$)?\s*
     (?P<high>\d{1,3}(?:,\d{3})*(?:\.\d+)?)
     \s*(?P<k>[kK])?\s*

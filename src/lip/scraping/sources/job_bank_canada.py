@@ -15,6 +15,7 @@ and switch to the partner API which has richer fields and higher rate limits.
 
 from __future__ import annotations
 
+import contextlib
 import json
 from collections.abc import Iterator
 from datetime import date, datetime
@@ -59,10 +60,8 @@ class JobBankCanadaSpider(Spider):
         )
 
     def __del__(self) -> None:
-        try:
+        with contextlib.suppress(Exception):
             self._client.close()
-        except Exception:
-            pass
 
     @retry(stop=stop_after_attempt(3), wait=wait_exponential(min=2, max=20))
     def _fetch_page(self, prefix: str, page: int) -> dict[str, Any]:
@@ -99,8 +98,7 @@ class JobBankCanadaSpider(Spider):
                 if not postings:
                     break
 
-                for p in postings:
-                    yield p
+                yield from postings
 
 
 def _extract_postings(payload: dict[str, Any]) -> list[ScrapedPosting]:

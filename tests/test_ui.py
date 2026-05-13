@@ -17,7 +17,7 @@ from lip.db import get_db
 class _FakeSession:
     """Minimal Session stand-in that returns 0 for counts and [] for selects."""
 
-    def scalar(self, _stmt):  # noqa: D401 - matches SA Session.scalar
+    def scalar(self, _stmt):
         return 0
 
     def scalars(self, _stmt):

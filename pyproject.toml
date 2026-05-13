@@ -65,7 +65,15 @@ target-version = "py311"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP", "N", "SIM", "RUF"]
-ignore = ["E501"]
+# B008: FastAPI uses Depends/Query in argument defaults by design.
+# N802: SQLAlchemy convention uses CamelCase for session factories like
+#       SessionLocal; we follow it deliberately.
+ignore = ["E501", "B008", "N802"]
+
+[tool.ruff.lint.per-file-ignores]
+# Compensation regex deliberately accepts en-dash (typographic range marker)
+# in addition to the ASCII hyphen — the literal must appear in source.
+"src/lip/enrichment/compensation.py" = ["RUF001"]
 
 [tool.mypy]
 python_version = "3.11"

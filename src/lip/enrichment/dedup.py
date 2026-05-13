@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import hashlib
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 from sqlalchemy import select
@@ -59,7 +59,7 @@ def find_matching_canonical(
     within the rolling window, if one exists.
     """
     window_days = window_days or _settings.cross_source_dedup_window_days
-    cutoff = datetime.now(timezone.utc) - timedelta(days=window_days)
+    cutoff = datetime.now(UTC) - timedelta(days=window_days)
     stmt = (
         select(Posting)
         .where(Posting.dedup_key == key.hash())
@@ -86,7 +86,7 @@ def find_semantic_match(
     """
     threshold = threshold or _settings.semantic_dedup_threshold
     window_days = window_days or _settings.cross_source_dedup_window_days
-    cutoff = datetime.now(timezone.utc) - timedelta(days=window_days)
+    cutoff = datetime.now(UTC) - timedelta(days=window_days)
     distance_cutoff = 1.0 - threshold
 
     # Use raw SQL for the vector op to keep the dependency surface small;

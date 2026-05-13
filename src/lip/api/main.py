@@ -3,8 +3,8 @@
 Exposes the v1 endpoints described in §5.1 of the build plan.
 """
 
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from typing import AsyncIterator
 
 from fastapi import FastAPI
 
