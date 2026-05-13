@@ -36,9 +36,16 @@ def _s3_key(source: str, source_posting_id: str, scraped_at: datetime) -> str:
     return f"raw/{source}/{yyyy_mm_dd}/{safe_id}.json"
 
 
-def archive_to_s3(posting: ScrapedPosting) -> str:
-    """Write raw payload + metadata to object storage, return the key."""
+def archive_to_s3(posting: ScrapedPosting) -> str | None:
+    """Write raw payload + metadata to object storage, return the key.
+
+    No-ops (returns None) when ``LIP_S3_ENDPOINT`` is unset — the
+    deployed Fly environment has no object store yet. RawPosting is
+    still written to Postgres, so this is safe to disable.
+    """
     settings = get_settings()
+    if not settings.s3_endpoint:
+        return None
     key = _s3_key(posting.source, posting.source_posting_id, posting.scraped_at)
     body = json.dumps(
         {

@@ -68,6 +68,67 @@ You have two ways to kick off a deploy, neither needs a terminal:
 3. **Verify:** load <https://laborint.fly.dev/>. You should see the
    plaintext UI with empty-state messages on every section.
 
+## Running a scrape from the UI
+
+Once the app is up you need an admin token to authenticate ingestion runs.
+This is a separate secret from the Fly deploy token.
+
+### 1. Pick an admin token
+
+Any long random string works. From a browser address bar, open
+<https://www.uuidgenerator.net/> and copy a v4 UUID, or just type a
+26+ character string of letters and digits. Call this value `TOK`
+in the steps below.
+
+### 2. Set the token on the Fly app
+
+1. Open <https://fly.io/apps/laborint/secrets>.
+2. Add secret: key `LIP_ADMIN_TOKEN`, value `TOK`.
+3. Save. Fly will auto-roll the machines.
+
+### 3. Mirror the token into GitHub
+
+1. Open <https://github.com/aerialretina/cc/settings/secrets/actions>.
+2. Add repo secret: name `LIP_ADMIN_TOKEN`, value `TOK` (same string).
+
+### 4. Run a scrape
+
+Open
+<https://github.com/aerialretina/cc/actions/workflows/scrape.yml> →
+**Run workflow** → pick branch `claude/labor-intelligence-platform-Mt7F5` →
+leave `spider = job_bank_canada`, `max_postings = 100` →
+**Run workflow**.
+
+The job POSTs `https://laborint.fly.dev/admin/scrape/job_bank_canada`
+with the admin token and prints the JSON response. Healthy looks like:
+
+```json
+{
+  "spider": "job_bank_canada",
+  "seen": 100,
+  "ingested_raw": 100,
+  "enriched": 100,
+  "took_seconds": 47.3,
+  "canonical_postings_total": 100,
+  "raw_postings_total": 100
+}
+```
+
+Now reload <https://laborint.fly.dev/ui/postings> — the table will be
+populated. <https://laborint.fly.dev/ui/organizations> will show the
+employers that resolved.
+
+### Notes
+
+- The scrape runs synchronously inside the web container — no
+  Celery worker required. Cap `max_postings` so the run stays
+  under Fly's HTTP timeout (~60–120 s by default).
+- Each click is additive: re-running upserts new postings and
+  refreshes `last_seen_at` on ones already in the DB.
+- S3 archiving is silently skipped on Fly (no `LIP_S3_ENDPOINT`).
+  Postings still land in Postgres; raw HTML snapshots are not
+  retained until you wire up an object store.
+
 ## Rotating the Neon password
 
 You pasted the live Neon password earlier — rotate it once the app is up:
@@ -86,3 +147,6 @@ You pasted the live Neon password earlier — rotate it once the app is up:
 | `Error: FLY_API_TOKEN secret not set` | Step 2 above wasn't done, or the secret name was wrong (must be `FLY_API_TOKEN`). |
 | `Error: app "laborint" not found` | The Fly app name differs. Edit `.github/workflows/fly-deploy.yml` and change `--app laborint`. |
 | `connection refused on 127.0.0.1:5432` (in Fly logs, not Actions) | `LIP_DATABASE_URL` wasn't set on the Fly app. Step 3 above. |
+| `HTTP 503` from `/admin/scrape` | `LIP_ADMIN_TOKEN` not set on the Fly app. Re-do step 2 of "Running a scrape from the UI". |
+| `HTTP 401` from `/admin/scrape` | `LIP_ADMIN_TOKEN` on the Fly app and on GitHub Actions don't match. They must be identical. |
+| `HTTP 500` with `connection refused` | The `LIP_DATABASE_URL` secret is missing or malformed. Inspect the latest Fly logs for the `[boot] db ...` diagnostic line. |

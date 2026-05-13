@@ -43,6 +43,10 @@ class Settings(BaseSettings):
     semantic_dedup_threshold: float = Field(default=0.92, ge=0.0, le=1.0)
     cross_source_dedup_window_days: int = 60
 
+    # Bearer token required to call /admin/* endpoints. When unset the
+    # admin routes 503 — there's no implicit-open mode in production.
+    admin_token: str | None = None
+
     @field_validator("database_url")
     @classmethod
     def _normalize_database_url(cls, v: str) -> str:
