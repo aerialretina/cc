@@ -53,6 +53,8 @@ jobs:
           total_seen=0
           total_ingested=0
           total_enriched=0
+          final_canonical=0
+          final_raw=0
           ok_count=0
           fail_count=0
           empty_count=0
@@ -75,6 +77,8 @@ jobs:
             ingested=$(jq -r '.ingested_raw // 0' resp.json)
             enriched=$(jq -r '.enriched // 0' resp.json)
             err=$(jq -r '.upstream_error // empty' resp.json)
+            final_canonical=$(jq -r '.canonical_postings_total // 0' resp.json)
+            final_raw=$(jq -r '.raw_postings_total // 0' resp.json)
             total_seen=$((total_seen + seen))
             total_ingested=$((total_ingested + ingested))
             total_enriched=$((total_enriched + enriched))
@@ -97,10 +101,5 @@ jobs:
           echo "  upstream-empty:      ${empty_count}"
           echo "  failed:              ${fail_count}"
           echo "Totals across spiders: seen=${total_seen} ingested=${total_ingested} enriched=${total_enriched}"
-
-          echo
-          echo "== Final canonical / raw counts =="
-          curl -sS -H "X-Admin-Token: ${ADMIN_TOKEN}" \
-            -X POST --max-time 30 \
-            "${BASE_URL}/admin/scrape/job_bank_canada?max_postings=0" \
-            | jq '{canonical_postings_total, raw_postings_total}' || true
+          echo "Canonical postings now: ${final_canonical}"
+          echo "Raw postings now:       ${final_raw}"
