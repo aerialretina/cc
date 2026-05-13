@@ -1,0 +1,42 @@
+name: Seed demo data on laborint
+
+# Click "Run workflow" to populate the live app with a curated set of
+# industrial organizations, postings, projects, and placement-verified
+# compensation records. Idempotent — safe to click repeatedly.
+
+on:
+  workflow_dispatch:
+    inputs:
+      base_url:
+        description: App URL
+        required: true
+        default: https://laborint.fly.dev
+        type: string
+
+jobs:
+  seed:
+    name: seed
+    runs-on: ubuntu-latest
+    steps:
+      - name: POST /admin/seed-demo
+        env:
+          ADMIN_TOKEN: ${{ secrets.LIP_ADMIN_TOKEN }}
+          BASE_URL: ${{ inputs.base_url }}
+        run: |
+          set -euo pipefail
+          if [ -z "${ADMIN_TOKEN}" ]; then
+            echo "::error::LIP_ADMIN_TOKEN repo secret is not set"
+            exit 1
+          fi
+          http_status=$(curl -sS -o response.json -w "%{http_code}" \
+            -X POST \
+            -H "X-Admin-Token: ${ADMIN_TOKEN}" \
+            --max-time 60 \
+            "${BASE_URL}/admin/seed-demo")
+          echo "HTTP ${http_status}"
+          echo "----- response -----"
+          cat response.json
+          echo
+          if [ "${http_status}" != "200" ]; then
+            exit 1
+          fi
