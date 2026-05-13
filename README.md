@@ -43,19 +43,23 @@ live DB. Routes: `/`, `/ui/postings`, `/ui/organizations`,
 
 ## Deploy to a public URL
 
-`Dockerfile` + `fly.toml` ship in the repo. Walkthrough:
-[`docs/deploy-fly.md`](docs/deploy-fly.md). Short version:
+Two paths, depending on whether you'll touch a terminal:
 
-```bash
-fly launch --no-deploy --copy-config
-fly mpg create --name lip-db && fly mpg attach lip-db --app <your-app>
-fly secrets set LIP_DATABASE_URL="$(fly mpg connect lip-db --print-url)" --app <your-app>
-fly deploy
-```
+- **No terminal — UI clicks only.** Wire up GitHub Actions once, then
+  every push deploys to Fly automatically. See
+  [`docs/deploy-no-terminal.md`](docs/deploy-no-terminal.md).
+- **CLI (faster for one-offs).** See
+  [`docs/deploy-fly.md`](docs/deploy-fly.md):
 
-The image runs `alembic upgrade head` on every container boot, so the
-schema lands automatically. `auto_stop_machines = true` keeps the cost
-near-zero while the app is idle.
+  ```bash
+  fly launch --no-deploy --copy-config
+  fly secrets set LIP_DATABASE_URL='postgres://...' --app <your-app>
+  fly deploy
+  ```
+
+Either way: the image runs `alembic upgrade head` on every container
+boot, so the schema lands automatically. `auto_stop_machines = true`
+keeps the cost near-zero while the app is idle.
 
 Run the worker in another shell:
 
