@@ -1,0 +1,53 @@
+name: Scrape all sources on laborint
+
+# UI-only fan-out: POSTs /admin/scrape-all so every registered spider
+# runs once with a low per-spider cap. The endpoint is resilient — a
+# flaky source returns upstream_error in its per-spider summary rather
+# than crashing the run.
+
+on:
+  workflow_dispatch:
+    inputs:
+      max_postings_per_spider:
+        description: Per-spider posting cap (keeps the request inside Fly's HTTP timeout)
+        required: true
+        default: "20"
+        type: string
+      base_url:
+        description: App URL
+        required: true
+        default: https://laborint.fly.dev
+        type: string
+
+jobs:
+  scrape-all:
+    name: scrape-all
+    runs-on: ubuntu-latest
+    steps:
+      - name: POST /admin/scrape-all
+        env:
+          ADMIN_TOKEN: ${{ secrets.LIP_ADMIN_TOKEN }}
+          MAX: ${{ inputs.max_postings_per_spider }}
+          BASE_URL: ${{ inputs.base_url }}
+        run: |
+          set -euo pipefail
+          if [ -z "${ADMIN_TOKEN}" ]; then
+            echo "::error::LIP_ADMIN_TOKEN repo secret is not set"
+            exit 1
+          fi
+          http_status=$(curl -sS -o response.json -w "%{http_code}" \
+            -X POST \
+            -H "X-Admin-Token: ${ADMIN_TOKEN}" \
+            --max-time 540 \
+            "${BASE_URL}/admin/scrape-all?max_postings_per_spider=${MAX}")
+          echo "HTTP ${http_status}"
+          echo "----- response -----"
+          if command -v jq >/dev/null && [ -s response.json ]; then
+            jq . response.json || cat response.json
+          else
+            cat response.json
+          fi
+          echo
+          if [ "${http_status}" != "200" ]; then
+            exit 1
+          fi
