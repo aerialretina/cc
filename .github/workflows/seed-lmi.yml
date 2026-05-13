@@ -1,0 +1,41 @@
+name: Seed LMI snapshot on laborint
+
+# UI-only trigger for POST /admin/seed-lmi. Loads the curated Canadian
+# StatCan LFS + BuildForce labor-market snapshot into lmi_snapshot.
+
+on:
+  workflow_dispatch:
+    inputs:
+      base_url:
+        description: App URL
+        required: true
+        default: https://laborint.fly.dev
+        type: string
+
+jobs:
+  seed-lmi:
+    name: seed-lmi
+    runs-on: ubuntu-latest
+    steps:
+      - name: POST /admin/seed-lmi
+        env:
+          ADMIN_TOKEN: ${{ secrets.LIP_ADMIN_TOKEN }}
+          BASE_URL: ${{ inputs.base_url }}
+        run: |
+          set -euo pipefail
+          if [ -z "${ADMIN_TOKEN}" ]; then
+            echo "::error::LIP_ADMIN_TOKEN repo secret is not set"
+            exit 1
+          fi
+          http_status=$(curl -sS -o response.json -w "%{http_code}" \
+            -X POST \
+            -H "X-Admin-Token: ${ADMIN_TOKEN}" \
+            --max-time 60 \
+            "${BASE_URL}/admin/seed-lmi")
+          echo "HTTP ${http_status}"
+          echo "----- response -----"
+          cat response.json
+          echo
+          if [ "${http_status}" != "200" ]; then
+            exit 1
+          fi
