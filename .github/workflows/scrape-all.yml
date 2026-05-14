@@ -9,9 +9,9 @@ on:
   workflow_dispatch:
     inputs:
       max_postings_per_spider:
-        description: Per-spider posting cap
+        description: Per-spider posting cap (Adzuna can yield ~1000; ATS APIs 50-300)
         required: true
-        default: "20"
+        default: "500"
         type: string
       base_url:
         description: App URL
@@ -65,7 +65,7 @@ jobs:
             status=$(curl -sS -o resp.json -w "%{http_code}" \
               -X POST \
               -H "X-Admin-Token: ${ADMIN_TOKEN}" \
-              --max-time 90 \
+              --max-time 240 \
               "${BASE_URL}/admin/scrape/${name}?max_postings=${MAX}" || echo "000")
             if [ "${status}" != "200" ]; then
               fail_count=$((fail_count + 1))
